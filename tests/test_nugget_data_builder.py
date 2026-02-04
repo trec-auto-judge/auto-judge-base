@@ -3,13 +3,13 @@
 import tempfile
 from pathlib import Path
 
-from trec_auto_judge.nugget_data import (
+from autojudge_base.nugget_data import (
     Creator, NuggetQuestion, AggregatorType, Answer, NuggetBank, NuggetClaim,
     Offsets, Reference, load_nugget_bank_json, print_nugget_json,
     nugget_to_dict, question_nugget_to_dict, write_nugget_bank_json,
     merge_nugget_claims, merge_nugget_questions
 )
-from trec_auto_judge.nugget_data import (
+from autojudge_base.nugget_data import (
     NuggetBanks, load_nugget_banks_from_file, load_nugget_banks_from_directory,
     write_nugget_banks
 )
@@ -368,7 +368,7 @@ def test_nugget_banks_duplicate_error():
 
 def test_nugget_banks_write_read_jsonl():
     """Test writing and reading NuggetBanks in JSONL format."""
-    from trec_auto_judge.nugget_data import NuggetBank, NuggetBanks
+    from autojudge_base.nugget_data import NuggetBank, NuggetBanks
 
     bank1 = NuggetBank(query_id="t1", title_query="Topic 1")
     bank1.add_nuggets(NuggetQuestion.from_lazy("t1", "Q1?", ["A1"]))
@@ -391,7 +391,7 @@ def test_nugget_banks_write_read_jsonl():
 
 def test_nugget_banks_write_read_jsonl_gz():
     """Test writing and reading compressed JSONL."""
-    from trec_auto_judge.nugget_data import NuggetBank, NuggetBanks, load_nugget_banks_from_file
+    from autojudge_base.nugget_data import NuggetBank, NuggetBanks, load_nugget_banks_from_file
 
     bank = NuggetBank(query_id="t1", title_query="Topic 1")
     bank.add_nuggets(NuggetQuestion.from_lazy("t1", "Q?", ["A"]))
@@ -407,7 +407,7 @@ def test_nugget_banks_write_read_jsonl_gz():
 
 def test_nugget_banks_write_read_directory():
     """Test writing and reading from directory format."""
-    from trec_auto_judge.nugget_data import NuggetBank, NuggetBanks, load_nugget_banks_from_directory
+    from autojudge_base.nugget_data import NuggetBank, NuggetBanks, load_nugget_banks_from_directory
 
     bank1 = NuggetBank(query_id="topic-1", title_query="Topic 1")
     bank1.add_nuggets(NuggetQuestion.from_lazy("topic-1", "Q1?", ["A1"]))
@@ -454,21 +454,21 @@ def test_backwards_compat_old_claim_fields():
 
 def test_import_nugget_banks_type():
     """Test dynamic import of NuggetBanks container types."""
-    from trec_auto_judge.nugget_data.io import import_nugget_banks_type
+    from autojudge_base.nugget_data.io import import_nugget_banks_type
 
     # Import NuggetBanks
     nb_type = import_nugget_banks_type("trec_auto_judge.nugget_data.NuggetBanks")
     assert nb_type is NuggetBanks
 
     # Import NuggetizerNuggetBanks
-    from trec_auto_judge.nugget_data import NuggetizerNuggetBanks
+    from autojudge_base.nugget_data import NuggetizerNuggetBanks
     nnb_type = import_nugget_banks_type("trec_auto_judge.nugget_data.NuggetizerNuggetBanks")
     assert nnb_type is NuggetizerNuggetBanks
 
 
 def test_import_nugget_banks_type_invalid():
     """Test that invalid import paths raise appropriate errors."""
-    from trec_auto_judge.nugget_data.io import import_nugget_banks_type
+    from autojudge_base.nugget_data.io import import_nugget_banks_type
     import pytest
 
     # Non-existent module
@@ -482,7 +482,7 @@ def test_import_nugget_banks_type_invalid():
 
 def test_load_nugget_banks_generic():
     """Test protocol-based generic loading."""
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetQuestion,
         load_nugget_banks_generic, write_nugget_banks_generic
     )
@@ -508,7 +508,7 @@ def test_load_nugget_banks_generic():
 
 def test_write_nugget_banks_generic_directory():
     """Test protocol-based generic writing to directory."""
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetQuestion,
         write_nugget_banks_generic, load_nugget_banks_from_directory_generic
     )
@@ -541,8 +541,8 @@ def test_write_nugget_banks_generic_directory():
 
 def test_nugget_banks_protocol_compliance():
     """Test that NuggetBanks satisfies NuggetBanksProtocol."""
-    from trec_auto_judge.nugget_data import NuggetBanks, NuggetBank
-    from trec_auto_judge.nugget_data.protocols import NuggetBanksProtocol, NuggetBankProtocol
+    from autojudge_base.nugget_data import NuggetBanks, NuggetBank
+    from autojudge_base.nugget_data.protocols import NuggetBanksProtocol, NuggetBankProtocol
 
     # Check protocol compliance
     assert isinstance(NuggetBanks(banks={}), NuggetBanksProtocol)
@@ -559,8 +559,8 @@ def test_nugget_banks_protocol_compliance():
 
 def test_nuggetizer_nugget_banks_protocol_compliance():
     """Test that NuggetizerNuggetBanks satisfies NuggetBanksProtocol."""
-    from trec_auto_judge.nugget_data import NuggetizerNuggetBanks, NuggetizerNuggetBank
-    from trec_auto_judge.nugget_data.protocols import NuggetBanksProtocol, NuggetBankProtocol
+    from autojudge_base.nugget_data import NuggetizerNuggetBanks, NuggetizerNuggetBank
+    from autojudge_base.nugget_data.protocols import NuggetBanksProtocol, NuggetBankProtocol
 
     # Check protocol compliance
     assert isinstance(NuggetizerNuggetBanks(banks={}), NuggetBanksProtocol)
@@ -577,7 +577,7 @@ def test_nuggetizer_nugget_banks_protocol_compliance():
 
 def test_nuggetizer_nugget_banks_io():
     """Test I/O for NuggetizerNuggetBanks using generic functions."""
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetizerNuggetBanks, NuggetizerNuggetBank,
         load_nugget_banks_generic, write_nugget_banks_generic
     )
@@ -605,11 +605,11 @@ def test_nuggetizer_nugget_banks_io():
 def test_nugget_banks_verification_all_pass():
     """Test that verification passes for complete, valid nugget banks."""
     import pytest
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetQuestion,
         NuggetBanksVerification
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     # Create topics
     topics = [
@@ -634,11 +634,11 @@ def test_nugget_banks_verification_all_pass():
 def test_nugget_banks_verification_complete_topics():
     """Test that verification fails when topics are missing nugget banks."""
     import pytest
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetQuestion,
         NuggetBanksVerification, NuggetBanksVerificationError
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     # Create 3 topics
     topics = [
@@ -665,11 +665,11 @@ def test_nugget_banks_verification_complete_topics():
 def test_nugget_banks_verification_no_extra_topics():
     """Test that verification fails when nugget banks exist for unknown topics."""
     import pytest
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetQuestion,
         NuggetBanksVerification, NuggetBanksVerificationError
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     # Create 1 topic
     topics = [
@@ -694,11 +694,11 @@ def test_nugget_banks_verification_no_extra_topics():
 def test_nugget_banks_verification_non_empty_banks():
     """Test that verification fails when nugget banks are empty."""
     import pytest
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank,
         NuggetBanksVerification, NuggetBanksVerificationError
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     # Create topics
     topics = [
@@ -717,11 +717,11 @@ def test_nugget_banks_verification_non_empty_banks():
 
 def test_nugget_banks_verification_chaining():
     """Test that verification methods can be chained."""
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetQuestion,
         NuggetBanksVerification
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     topics = [Request(request_id="t1", title="Topic 1")]
     topic_ids = [t.request_id for t in topics]
@@ -738,11 +738,11 @@ def test_nugget_banks_verification_chaining():
 def test_nugget_banks_verification_fail_fast():
     """Test that verification fails on first error (fail-fast)."""
     import pytest
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank,
         NuggetBanksVerification, NuggetBanksVerificationError
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     # Create topics
     topics = [
@@ -762,12 +762,12 @@ def test_nugget_banks_verification_fail_fast():
 
 def test_nugget_banks_verification_with_nuggetizer_format():
     """Test verification works with NuggetizerNuggetBanks."""
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetizerNuggetBanks, NuggetizerNuggetBank,
         NuggetBanksVerification
     )
-    from trec_auto_judge.nugget_data.nuggetizer.nuggetizer_data import NuggetizerNugget
-    from trec_auto_judge.request import Request
+    from autojudge_base.nugget_data.nuggetizer.nuggetizer_data import NuggetizerNugget
+    from autojudge_base.request import Request
 
     topics = [Request(request_id="t1", title="Topic 1")]
     topic_ids = [t.request_id for t in topics]
@@ -783,11 +783,11 @@ def test_nugget_banks_verification_with_nuggetizer_format():
 
 def test_nugget_banks_verification_with_claims():
     """Test verification recognizes claims as valid nuggets."""
-    from trec_auto_judge.nugget_data import (
+    from autojudge_base.nugget_data import (
         NuggetBanks, NuggetBank, NuggetClaim,
         NuggetBanksVerification
     )
-    from trec_auto_judge.request import Request
+    from autojudge_base.request import Request
 
     topics = [Request(request_id="t1", title="Topic 1")]
     topic_ids = [t.request_id for t in topics]

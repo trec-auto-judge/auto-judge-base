@@ -3,7 +3,7 @@ from click.testing import CliRunner
 import click
 import json
 from pathlib import Path
-from trec_auto_judge import option_ir_dataset, option_rag_responses, option_rag_topics, load_requests_from_file
+from autojudge_base import option_ir_dataset, option_rag_responses, option_rag_topics, load_requests_from_file
 from . import TREC_25_DATA
 from pathlib import Path
 

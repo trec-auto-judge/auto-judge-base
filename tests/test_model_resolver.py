@@ -7,8 +7,8 @@ These tests verify the model resolution logic without making real LLM calls.
 import pytest
 from textwrap import dedent
 
-from trec_auto_judge.llm import MinimaLlmConfig
-from trec_auto_judge.llm_resolver import (ModelPreferences, AvailableModels,  ModelResolver, ModelResolutionError)
+from autojudge_base.llm import MinimaLlmConfig
+from autojudge_base.llm_resolver import (ModelPreferences, AvailableModels,  ModelResolver, ModelResolutionError)
 
 
 class TestModelPreferences:

@@ -1,9 +1,9 @@
 import unittest
 from typing import Type
-from trec_auto_judge import AutoJudge, Sequence, Report, Request, Leaderboard, Optional, Qrels, MeasureSpec, LeaderboardSpec, LeaderboardBuilder, NuggetBanks
-from trec_auto_judge import auto_judge_to_click_command
-from trec_auto_judge.nugget_data import NuggetBanksProtocol
-from trec_auto_judge.llm import MinimaLlmConfig
+from autojudge_base import AutoJudge, Sequence, Report, Request, Leaderboard, Optional, Qrels, MeasureSpec, LeaderboardSpec, LeaderboardBuilder, NuggetBanks
+from autojudge_base import auto_judge_to_click_command
+from autojudge_base.nugget_data import NuggetBanksProtocol
+from autojudge_base.llm import MinimaLlmConfig
 from click.testing import CliRunner
 from . import TREC_25_DATA
 from pathlib import Path

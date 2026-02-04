@@ -2,4 +2,4 @@ __pycache__
 .approval_tests_temp
 test-coverage
 .coverage
-trec_auto_judge.egg-info
+.egg-info

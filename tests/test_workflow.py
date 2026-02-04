@@ -4,8 +4,8 @@ from pathlib import Path
 
 import yaml
 
-from trec_auto_judge.workflow import Workflow, load_workflow, resolve_config_file_path
-from trec_auto_judge.judge_runner import _write_run_config
+from autojudge_base.workflow import Workflow, load_workflow, resolve_config_file_path
+from autojudge_base.judge_runner import _write_run_config
 
 
 class TestWorkflowModel(unittest.TestCase):

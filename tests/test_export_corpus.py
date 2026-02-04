@@ -1,5 +1,5 @@
 import unittest
-from trec_auto_judge import main
+from autojudge_base.cli import main
 from tempfile import TemporaryDirectory
 from click.testing import CliRunner
 from . import TREC_25_DATA

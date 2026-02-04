@@ -4,8 +4,8 @@ import unittest
 import tempfile
 import os
 
-from trec_auto_judge.workflow import KeyValueType
-from trec_auto_judge.workflow import load_workflow
+from autojudge_base.workflow import KeyValueType
+from autojudge_base.workflow import load_workflow
 
 
 class TestKeyValueType(unittest.TestCase):
