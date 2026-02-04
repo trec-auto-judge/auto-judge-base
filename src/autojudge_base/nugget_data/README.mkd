@@ -1,0 +1,180 @@
+# Usage of NuggetBank (v3) Format
+
+- contact: Laura Dietz <dietz@cs.unh.edu>
+
+```python
+
+from trec_auto_judge.nugget_data import (
+    NuggetBank, NuggetQuestion, NuggetClaim,
+    Answer, Reference, Offsets, AggregatorType, Creator
+)
+
+# Define some answers with optional references
+a1 = Answer.from_lazy(answer="UNESCO provides guidelines")
+a2 = Answer.from_lazy(answer="visitor numbers are restricted")
+a3 = Answer.from_lazy(answer="restoration uses traditional methods")
+
+# Sub-nuggets for a composite question
+sub_nuggets = [
+    NuggetQuestion(query_id="1", question="Who sets guidelines?").add_gold_answers(a1),
+    NuggetQuestion(query_id="1", question="How is wear reduced?").add_gold_answers(a2),
+]
+
+# Main question with sub-nuggets
+nug1 = (
+    NuggetQuestion(
+        question="What conservation efforts exist at Machu Picchu?",
+        query_id="1",
+        sub_nuggets=sub_nuggets
+    )
+    .add_gold_answers([a1, a2, a3])
+)
+
+# Reference-based answer
+ref_answer = Answer.from_lazy(
+    answer="15th century",
+    references=["doc123", "doc456"]
+)
+
+nug2 = NuggetQuestion(
+    query_id="1",
+    question="When was Machu Picchu built?",
+    operator=Operator.OR
+).add_gold_answers([ref_answer])
+
+# Simple claim
+claim = NuggetClaim(
+    query_id="1",
+    claim="There are unicorns in the world",
+    related_question_text="Where are unicorns born?",
+    related_answer=[Answer(answer="where their mom is")],
+    references=[Reference(
+        doc_id="123",
+        collection="mydocs",
+        offsets=Offsets(start_offset=0, end_offset=10, encoding="utf-8")
+    )]
+)
+
+# Create the nugget bank and add all nuggets
+nugget_bank = NuggetBank(query_id="1", title_query="Machu Picchu facts",
+full_query={"background":
+"As an archaeologist leading an expedition in South America, I require insights into the \"Mysteries of Machu Picchu's Architecture\" to deepen our team\'s understanding of its construction techniques and historical significance. This report will guide our fieldwork and contribute to the scholarly discourse on Incan civilization."
+,"problem_statement":"Produce a report on the mysteries of Machu Picchu's architecture. The focus of the report is on speculations and theories regarding the construction methods and architectural marvels of Machu Picchu. I am also interested in hypotheses about the purpose, techniques, and significance of the unique structures at this ancient Incan site."},
+test_collection="neuclir24")
+
+nugget_bank.add_nuggets([nug1, nug2, claim])
+nugget_bank.add_creator(Creator(
+    is_human=true,
+    contact=["NIST", "Dawn Lawrie"]
+))
+
+
+# -----------------------
+# More elaborate example
+
+# Create a detailed creator entry
+creator = Creator(
+    is_human=False,
+    llm_model="gpt2",
+    format="v2",
+    contact=["Laura"],
+    llm_prompt=["Does this passage correctly answer this question? {passage}, {question}, {gold_answer}"],
+    llm_prompt_strategy="static"
+)
+
+# Build answer references
+references = [
+    Reference(
+        doc_id="doc123",
+        text="Machu Picchu is situated at 2430 meters above sea level.",
+        offsets=Offsets(start_offset=0, end_offset=55, encoding="UTF-8"),
+        creator=[creator]
+    ),
+    Reference(
+        doc_id="doc456",
+        text="The ancient citadel stands high in the Andes mountains.",
+        offsets=Offsets(start_offset=10, end_offset=60, encoding="UTF-8"),
+        creator=[creator]
+    )
+]
+
+# Compose the nugget question with metadata and multiple answers
+nugget = NuggetQuestion(
+    question="What is the elevation of Machu Picchu?",
+    query_id="q42",
+    metadata={"source": "LLM-generated prompt v2", "difficulty": "medium"}
+).add_gold_answers([
+    Answer(answer="2430 meters", references=[references[0]]),
+    Answer(answer="2430m above sea level", references=[references[1]])
+])
+
+# Create and populate the NuggetBank
+bank = NuggetBank(query_id="q42", title_query="Machu Picchu facts")
+bank.add_nuggets(nugget)
+
+
+# Optional: print as JSON
+from trec_auto_judge.nugget_data import print_nugget_json
+print_nugget_json(nugget_bank)
+
+
+# Save to .json.gz file
+output_path = Path("machu_picchu_nuggets.json.gz")
+with gzip.open(output_path, "wt", encoding="utf-8") as f:
+    json.dump(nugget_bank.model_dump(exclude_none=True), f, indent=2)
+
+print(f"NuggetBank saved to: {output_path}")
+
+
+```
+
+---
+
+## Verification
+
+NuggetBanks can be verified against expected topic IDs to ensure completeness.
+
+### Quick Verification via `.verify()`
+
+The simplest way to verify nugget banks:
+
+```python
+topic_ids = [t.request_id for t in topics]
+nugget_banks.verify(
+    expected_topic_ids=topic_ids,
+    warn=False  # raise exceptions on failure
+)
+```
+
+Parameters:
+- `expected_topic_ids`: List of topic IDs that should have nugget banks
+- `warn`: If `True`, print warnings instead of raising exceptions
+
+### Detailed Verification via `NuggetBanksVerification`
+
+For more granular control or test cases, use the fluent `NuggetBanksVerification` class:
+
+```python
+from trec_auto_judge.nugget_data import NuggetBanksVerification
+
+# Chain specific checks
+NuggetBanksVerification(
+    nugget_banks,
+    expected_topic_ids=topic_ids,
+    warn=False
+).complete_topics().no_extra_topics().non_empty_banks()
+
+# Or run all checks
+NuggetBanksVerification(nugget_banks, expected_topic_ids=topic_ids).all()
+```
+
+Available verification methods:
+
+| Method | Description |
+|--------|-------------|
+| `complete_topics()` | Every expected topic has a nugget bank |
+| `no_extra_topics()` | No nugget banks for unexpected topics |
+| `non_empty_banks()` | Each nugget bank has at least one nugget |
+| `all()` | Run all checks |
+
+This prevents silent issues like missing topics or empty nugget banks from propagating through the evaluation pipeline.

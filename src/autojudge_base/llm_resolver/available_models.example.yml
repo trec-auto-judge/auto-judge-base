@@ -1,0 +1,36 @@
+# Example available_models.yml for organizers
+# This file is overridden by TIRA at runtime with actual endpoints.
+#
+# Place this file at:
+#   - Path specified by AUTOJUDGE_AVAILABLE_MODELS env var, OR
+#   - ~/.autojudge/available_models.yml
+
+models:
+  # Local llama model (preferred for cost/latency)
+  llama-3.3-70b-instruct-tp:
+    base_url: "http://ben-server.local:3001/v1"
+    model_id: "llama-3.3-70b-instruct-tp4"
+    api_key_env: ""  # No API key needed for local
+    enabled: true
+
+  # OpenAI GPT-4o
+  gpt-4o:
+    base_url: "https://api.openai.com/v1"
+    model_id: "gpt-4o-2024-08-06"
+    api_key_env: "OPENAI_API_KEY"
+    enabled: true
+
+  # Disabled model (won't be offered to participants)
+  disabled-model:
+    base_url: "https://example.com/v1"
+    model_id: "disabled"
+    api_key_env: ""
+    enabled: false
+
+# Default model when participant has no preferences or on_no_match: "use_default"
+default_model: "llama-3.3-70b-instruct-tp"
+
+# Aliases allow participants to request by common name
+aliases:
+  "gpt-4": "gpt-4-turbo"
+  "llama-3.3-70b-instruct": "llama-3.3-70b-instruct-tp"
