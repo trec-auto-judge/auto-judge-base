@@ -81,6 +81,78 @@ auto-judge export-corpus --output corpus.tar.gz
 auto-judge list-models
 ```
 
+## Data Loading Utilities
+
+### Loading Reports (RAG System Outputs)
+
+```python
+from autojudge_base.report import Report, load_report
+
+# Load all reports from a directory or JSONL file
+reports: list[Report] = load_report(Path("responses/"))
+
+# Access report data
+for report in reports:
+    print(report.metadata.run_id)
+    print(report.metadata.topic_id)
+    print(report.get_report_text())
+```
+
+### Loading Requests (Topics/Queries)
+
+```python
+from autojudge_base.request import Request, load_requests_from_file, load_requests_from_irds
+
+# Load from JSONL file
+requests: list[Request] = load_requests_from_file(Path("topics.jsonl"))
+
+# Load from ir_datasets
+requests: list[Request] = load_requests_from_irds("trec-rag-2025")
+
+# Access request data
+for req in requests:
+    print(req.request_id)
+    print(req.title)
+```
+
+### Loading Documents
+
+```python
+from autojudge_base.document import Document, load_documents, load_retrieved_docs
+
+# Load corpus documents
+docs: list[Document] = load_documents(Path("corpus.jsonl"))
+
+# Load retrieved documents (with rankings)
+retrieved: list[RetrievedDocuments] = load_retrieved_docs(Path("retrieved.jsonl"))
+```
+
+### Loading Nugget Banks
+
+```python
+from autojudge_base.nugget_data import (
+    NuggetBanks,
+    load_nugget_banks_from_file,
+)
+
+# Load nugget banks from JSONL
+nuggets: NuggetBanks = load_nugget_banks_from_file(Path("nuggets.jsonl"))
+
+# Access by topic
+bank = nuggets.banks["topic-1"]
+for question in bank.nuggets_as_list():
+    print(question.question)
+```
+
+### Writing Qrels
+
+```python
+from autojudge_base.qrels import Qrels, write_qrel_file
+
+# Write qrels to TREC format file
+write_qrel_file(qrels, Path("output.qrels"))
+```
+
 ## License
 
 MIT
