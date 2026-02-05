@@ -456,13 +456,13 @@ def test_import_nugget_banks_type():
     """Test dynamic import of NuggetBanks container types."""
     from autojudge_base.nugget_data.io import import_nugget_banks_type
 
-    # Import NuggetBanks
-    nb_type = import_nugget_banks_type("trec_auto_judge.nugget_data.NuggetBanks")
+    # Import NuggetBanks from autojudge_base
+    nb_type = import_nugget_banks_type("autojudge_base.nugget_data.NuggetBanks")
     assert nb_type is NuggetBanks
 
-    # Import NuggetizerNuggetBanks
+    # Import NuggetizerNuggetBanks from autojudge_base
     from autojudge_base.nugget_data import NuggetizerNuggetBanks
-    nnb_type = import_nugget_banks_type("trec_auto_judge.nugget_data.NuggetizerNuggetBanks")
+    nnb_type = import_nugget_banks_type("autojudge_base.nugget_data.NuggetizerNuggetBanks")
     assert nnb_type is NuggetizerNuggetBanks
 
 
@@ -477,7 +477,7 @@ def test_import_nugget_banks_type_invalid():
 
     # Non-existent class
     with pytest.raises(AttributeError):
-        import_nugget_banks_type("trec_auto_judge.nugget_data.NonExistentClass")
+        import_nugget_banks_type("autojudge_base.nugget_data.NonExistentClass")
 
 
 def test_load_nugget_banks_generic():
