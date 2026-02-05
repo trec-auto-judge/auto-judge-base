@@ -21,11 +21,11 @@ class LeaderboardVerification:
 
     Chain verification methods to run multiple checks:
 
-        LeaderboardVerification(leaderboard).complete_measures().same_topics_per_run()
+        LeaderboardVerification(leaderboard, on_missing="fix_aggregate").complete_measures().same_topics_per_run()
 
     Or run all checks:
 
-        LeaderboardVerification(leaderboard, expected_topic_ids=topics).all()
+        LeaderboardVerification(leaderboard, on_missing="fix_aggregate", expected_topic_ids=topics).all()
 
     Each method raises LeaderboardVerificationError on failure (fail-fast).
     """
