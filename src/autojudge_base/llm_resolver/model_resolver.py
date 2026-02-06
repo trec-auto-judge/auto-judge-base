@@ -6,13 +6,19 @@ resolved against an organizer-controlled pool of available models.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 import yaml
 
-from ..llm.llm_config import MinimaLlmConfig, BatchConfig, _env_str
+from ..llm_config import LlmConfigBase
+
+
+def _env_str(key: str, default: str = "") -> str:
+    """Get environment variable as string."""
+    return os.environ.get(key, default)
 
 
 class ModelResolutionError(Exception):
@@ -53,7 +59,7 @@ class ModelPreferences:
 @dataclass
 class AvailableModels:
     """Organizer-controlled pool of available models."""
-    models: Dict[str, MinimaLlmConfig] = field(default_factory=dict)
+    models: Dict[str, LlmConfigBase] = field(default_factory=dict)
     default_model: Optional[str] = None
     aliases: Dict[str, str] = field(default_factory=dict)
     disabled: set[str] = field(default_factory=set)
@@ -66,7 +72,6 @@ class AvailableModels:
 
         models = {}
         disabled = set()
-        batch_config = BatchConfig.from_env()
 
         for name, spec in data.get("models", {}).items():
             if not spec.get("enabled", True):
@@ -76,11 +81,19 @@ class AvailableModels:
             api_key_env = spec.get("api_key_env", "OPENAI_API_KEY")
             api_key = _env_str(api_key_env)
 
-            models[name] = MinimaLlmConfig(
+            # Build raw dict for judges that need full MinimaLlmConfig
+            raw_config = {
+                "base_url": spec["base_url"].rstrip("/"),
+                "model": spec["model_id"],
+                "api_key": api_key,
+                **{k: v for k, v in spec.items() if k not in ("base_url", "model_id", "api_key_env", "enabled")},
+            }
+
+            models[name] = LlmConfigBase(
                 base_url=spec["base_url"].rstrip("/"),
                 model=spec["model_id"],
                 api_key=api_key,
-                batch=batch_config,
+                raw=raw_config,
             )
 
         default_model = data.get("default_model")
@@ -120,14 +133,13 @@ class AvailableModels:
             return cls.from_yaml(default_path)
 
         # Fallback: create from legacy environment variables
-        try:
-            config = MinimaLlmConfig.from_env()
+        config = LlmConfigBase.from_env()
+        if config.model:
             return cls(
                 models={config.model: config},
                 default_model=config.model,
             )
-        except RuntimeError:
-            return cls(models={})
+        return cls(models={})
 
     def get_enabled_models(self) -> List[str]:
         """Return list of enabled model names."""
@@ -143,7 +155,7 @@ class ModelResolver:
     """Resolves participant preferences against available pool."""
     available: AvailableModels
 
-    def resolve(self, preferences: ModelPreferences) -> MinimaLlmConfig:
+    def resolve(self, preferences: ModelPreferences) -> LlmConfigBase:
         """
         Resolve first matching model from preferences against available pool.
 

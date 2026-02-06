@@ -7,7 +7,7 @@ These tests verify the model resolution logic without making real LLM calls.
 import pytest
 from textwrap import dedent
 
-from autojudge_base.llm import MinimaLlmConfig
+from autojudge_base import LlmConfigBase
 from autojudge_base.llm_resolver import (ModelPreferences, AvailableModels,  ModelResolver, ModelResolutionError)
 
 
@@ -106,8 +106,8 @@ class TestAvailableModels:
         assert config.base_url == "https://api.example.com/v1"
 
     def test_get_enabled_models(self):
-        config1 = MinimaLlmConfig(base_url="https://a.com", model="model-a")
-        config2 = MinimaLlmConfig(base_url="https://b.com", model="model-b")
+        config1 = LlmConfigBase(base_url="https://a.com", model="model-a")
+        config2 = LlmConfigBase(base_url="https://b.com", model="model-b")
 
         available = AvailableModels(
             models={"model-a": config1, "model-b": config2}
@@ -132,9 +132,9 @@ class TestModelResolver:
     @pytest.fixture
     def resolver_with_models(self):
         """Create resolver with test models."""
-        config_a = MinimaLlmConfig(base_url="https://a.com/v1", model="model-a")
-        config_b = MinimaLlmConfig(base_url="https://b.com/v1", model="model-b")
-        config_c = MinimaLlmConfig(base_url="https://c.com/v1", model="model-c")
+        config_a = LlmConfigBase(base_url="https://a.com/v1", model="model-a")
+        config_b = LlmConfigBase(base_url="https://b.com/v1", model="model-b")
+        config_c = LlmConfigBase(base_url="https://c.com/v1", model="model-c")
 
         available = AvailableModels(
             models={"model-a": config_a, "model-b": config_b, "model-c": config_c},

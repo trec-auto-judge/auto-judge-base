@@ -29,7 +29,7 @@ In `click_plus.py:_resolve_llm_config()`:
 - Load participant preferences from `llm-config.yml`
 - Load organizer's available models via `ModelResolver.from_env()`
 - Match first available preference (resolving aliases)
-- Return ready-to-use `MinimaLlmConfig`
+- Return ready-to-use `LlmConfigBase`
 
 ### 5. Judge receives resolved config
 
@@ -47,7 +47,7 @@ judge.judge(rag_responses, rag_topics, llm_config)
 1. Loop through participant's `model_preferences` in order
 2. Resolve aliases (e.g., `llama-3.3-70b-instruct` → `llama-3.3-70b-instruct-tp`)
 3. Check if resolved name exists in organizer's enabled models
-4. Return first match as `MinimaLlmConfig`
+4. Return first match as `LlmConfigBase`
 5. If no match:
    - `on_no_match: "use_default"` (default) → Use organizer's `default_model`
    - `on_no_match: "error"` → Raise `ModelResolutionError`
@@ -197,7 +197,7 @@ trec-auto-judge list-models --resolve participant/llm-config.yml
 ### Programmatic
 
 ```python
-from trec_auto_judge.llm_resolver import AvailableModels
+from autojudge_base.llm_resolver import AvailableModels
 
 available = AvailableModels.from_env()
 print("Enabled:", available.get_enabled_models())

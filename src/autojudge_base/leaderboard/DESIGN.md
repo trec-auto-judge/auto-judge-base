@@ -304,7 +304,7 @@ class AutoJudge(Protocol):
         self,
         rag_responses: Sequence[Report],
         rag_topics: Sequence[Request],
-        llm_config: MinimaLlmConfig,
+        llm_config: LlmConfigBase,
         **kwargs
     ) -> Leaderboard: ...
 ```

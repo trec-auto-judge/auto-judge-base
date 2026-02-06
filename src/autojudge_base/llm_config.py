@@ -42,30 +42,36 @@ class LlmConfigBase:
     """
     Minimal LLM configuration implementation.
 
-    For full features (OpenAI, Azure, batching, DSPy integration),
-    use MinimaLlmConfig from the minima-llm package.
+    For full features (batching, transport, retries), judges can use the
+    raw config dict to instantiate MinimaLlmConfig from the minima-llm package:
+
+        from minima_llm import MinimaLlmConfig, OpenAIMinimaLlm
+        full_config = MinimaLlmConfig.from_dict(llm_config.raw)
+        backend = OpenAIMinimaLlm(full_config)
     """
 
     model: str = "gpt-4o-mini"
     cache_dir: Optional[Path] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    raw: dict = field(default_factory=dict)  # Full config for backends that need more
 
     @classmethod
     def from_env(cls) -> "LlmConfigBase":
         """Load from environment variables."""
         return cls(
-            model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-            cache_dir=Path(os.getenv("LLM_CACHE_DIR")) if os.getenv("LLM_CACHE_DIR") else None,
+            model=os.getenv("OPENAI_MODEL", os.getenv("LLM_MODEL", "gpt-4o-mini")),
+            cache_dir=Path(os.getenv("CACHE_DIR", os.getenv("LLM_CACHE_DIR", ""))) or None,
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL"),
+            raw={},
         )
 
     @classmethod
     def from_dict(cls, data: dict, default: "LlmConfigBase") -> "LlmConfigBase":
-        """Overlay dict values onto a default config."""
+        """Overlay dict values onto a default config, preserving full raw dict."""
         from dataclasses import replace
-        kwargs = {}
+        kwargs = {"raw": data}  # Always store full dict
         if "model" in data:
             kwargs["model"] = data["model"]
         if "cache_dir" in data:
@@ -74,7 +80,7 @@ class LlmConfigBase:
             kwargs["api_key"] = data["api_key"]
         if "base_url" in data:
             kwargs["base_url"] = data["base_url"]
-        return replace(default, **kwargs) if kwargs else default
+        return replace(default, **kwargs)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "LlmConfigBase":
@@ -87,7 +93,10 @@ class LlmConfigBase:
     def from_cli(cls, default: "LlmConfigBase", **cli_args) -> "LlmConfigBase":
         """Overlay individual CLI flags onto a config."""
         data = {k: v for k, v in cli_args.items() if v is not None}
-        return cls.from_dict(data, default=default)
+        # Merge CLI overrides into raw dict
+        merged_raw = {**default.raw, **data}
+        result = cls.from_dict(data, default=default)
+        return replace(result, raw=merged_raw)
 
 
 def load_llm_config(

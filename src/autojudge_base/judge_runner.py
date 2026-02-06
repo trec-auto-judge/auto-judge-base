@@ -19,7 +19,7 @@ from .nugget_data import (
 )
 from .qrels.qrels import Qrels, write_qrel_file
 from .leaderboard.leaderboard import Leaderboard
-from .llm import MinimaLlmConfig
+from .llm_config import LlmConfigBase
 from .report import Report
 from .request import Request
 from .workflow.paths import (
@@ -45,7 +45,7 @@ def run_judge(
     auto_judge=None,
     rag_responses: Iterable[Report] = None,
     rag_topics: Sequence[Request] = None,
-    llm_config: MinimaLlmConfig = None,
+    llm_config: LlmConfigBase = None,
     nugget_banks_path: Optional[Path] = None,
     judge_output_path: Optional[Path] = None,
     nugget_output_path: Optional[Path] = None,

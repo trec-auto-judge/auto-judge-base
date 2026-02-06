@@ -41,7 +41,7 @@ api_key: ""  # optional
 1. You declare an **ordered list** of preferred models in `llm-config.yml`
 2. At runtime, the system checks which models are available from the organizer's pool
 3. The **first available** model from your list is selected
-4. Your judge receives a ready-to-use `MinimaLlmConfig` with the resolved model
+4. Your judge receives a ready-to-use `LlmConfigBase` with the resolved model
 
 ## Configuration Format
 
@@ -83,20 +83,20 @@ The available models are controlled by the evaluation organizers. Common models 
 
 ## Using the Resolved Config in Your Judge
 
-Your judge receives the resolved `MinimaLlmConfig` as the third parameter:
+Your judge receives the resolved `LlmConfigBase` as the third parameter:
 
 ```python
-from trec_auto_judge import AutoJudge
-from trec_auto_judge.llm import MinimaLlmConfig, OpenAIMinimaLlm
+from autojudge_base import AutoJudge, LlmConfigBase
 
 class MyJudge(AutoJudge):
-    def judge(self, rag_responses, rag_topics, llm_config: MinimaLlmConfig):
-        # Create LLM backend from resolved config
-        llm = OpenAIMinimaLlm(llm_config)
-
-        # Use llm for your judging logic...
+    def judge(self, rag_responses, rag_topics, llm_config: LlmConfigBase, **kwargs):
         # llm_config.model contains the resolved model name
         # llm_config.base_url contains the endpoint URL
+        # llm_config.raw contains the full config dict for your LLM backend
+
+        # Example: use with your preferred LLM backend
+        # backend = MyLlmBackend(llm_config.base_url, llm_config.model)
+        pass
 ```
 
 ## Fallback: Environment Variables

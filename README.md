@@ -8,11 +8,6 @@ Core infrastructure for implementing TREC AutoJudge systems.
 pip install autojudge-base
 ```
 
-For full LLM features (batching, advanced transport):
-```bash
-pip install autojudge-base[minima-llm]
-```
-
 ## Quick Start
 
 ```python

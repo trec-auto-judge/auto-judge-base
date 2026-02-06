@@ -38,9 +38,6 @@ test = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
-minima-llm = [
-    "minima-llm>=0.1.0",
-]
 
 [project.scripts]
 auto-judge = "autojudge_base.cli:main"

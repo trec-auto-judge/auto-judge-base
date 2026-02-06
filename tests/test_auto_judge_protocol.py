@@ -3,7 +3,7 @@ from typing import Type
 from autojudge_base import AutoJudge, Sequence, Report, Request, Leaderboard, Optional, Qrels, MeasureSpec, LeaderboardSpec, LeaderboardBuilder, NuggetBanks
 from autojudge_base import auto_judge_to_click_command
 from autojudge_base.nugget_data import NuggetBanksProtocol
-from autojudge_base.llm import MinimaLlmConfig
+from autojudge_base import LlmConfigBase
 from click.testing import CliRunner
 from . import TREC_25_DATA
 from pathlib import Path
@@ -15,7 +15,7 @@ class NaiveJudge(AutoJudge):
 
     def create_nuggets(
         self,
-        llm_config: MinimaLlmConfig,
+        llm_config: LlmConfigBase,
         nugget_banks: Optional["NuggetBanksProtocol"] = None,
         rag_topics: Optional[Sequence["Request"]] = None,
         **kwargs
@@ -25,7 +25,7 @@ class NaiveJudge(AutoJudge):
     def judge(self,
               rag_responses: Sequence["Report"],
               rag_topics: Sequence["Request"],
-              llm_config: MinimaLlmConfig,
+              llm_config: LlmConfigBase,
               nugget_banks: Optional[NuggetBanksProtocol] = None,
               **kwargs) -> "Leaderboard":
         ret = LeaderboardBuilder(self.leaderboard_spec())

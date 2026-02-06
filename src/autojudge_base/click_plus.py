@@ -3,7 +3,7 @@ import sys
 from typing import Optional, Tuple
 from .io import load_runs_failsave
 from .request import load_requests_from_irds, load_requests_from_file
-from .llm import MinimaLlmConfig
+from .llm_config import LlmConfigBase
 from .llm_resolver import ModelPreferences, ModelResolver, ModelResolutionError
 from .workflow import (
     load_workflow,
@@ -329,7 +329,7 @@ def option_workflow():
 def _resolve_llm_config(
     llm_config_path: Optional[Path],
     submission: bool = False,
-) -> MinimaLlmConfig:
+) -> LlmConfigBase:
     """
     Resolve LLM config from llm-config.yml or environment.
 
@@ -365,7 +365,7 @@ def _resolve_llm_config(
     # Dev mode: load config from YAML (with env as base)
     if llm_config_path is not None:
         try:
-            config = MinimaLlmConfig.from_yaml(llm_config_path)
+            config = LlmConfigBase.from_yaml(llm_config_path)
             click.echo(f"Dev mode - loaded config: {config.model} from {config.base_url}", err=True)
             return config
         except FileNotFoundError:
@@ -374,20 +374,20 @@ def _resolve_llm_config(
         # We let that propagate since it's a user error that needs fixing
 
     # Fallback to environment-based config
-    return MinimaLlmConfig.from_env()
+    return LlmConfigBase.from_env()
 
 
 def _apply_llm_model_override(
-    llm_config: MinimaLlmConfig,
+    llm_config: LlmConfigBase,
     settings: dict,
     submission: bool,
-) -> tuple[MinimaLlmConfig, dict]:
+) -> tuple[LlmConfigBase, dict]:
     """
     Apply llm_model from settings to llm_config and strip it from settings.
 
     Steps:
     1. Extract llm_model from settings
-    2. Apply it to llm_config via with_model()
+    2. Apply it to llm_config
     3. In submission mode, validate the model is allowed by organizer
     4. Strip llm_model from settings before passing to AutoJudge
 
@@ -399,6 +399,8 @@ def _apply_llm_model_override(
     Returns:
         Tuple of (updated_llm_config, settings_without_llm_model)
     """
+    from dataclasses import replace
+
     llm_model = settings.get("llm_model")
     stripped_settings = {k: v for k, v in settings.items() if k != "llm_model"}
 
@@ -430,29 +432,11 @@ def _apply_llm_model_override(
             )
             return llm_config, stripped_settings
 
-    # Apply the model override
-    updated_config = llm_config.with_model(llm_model)
+    # Apply the model override (update both model and raw dict)
+    updated_raw = {**llm_config.raw, "model": llm_model}
+    updated_config = replace(llm_config, model=llm_model, raw=updated_raw)
     click.echo(f"Model override from settings: {llm_model}", err=True)
     return updated_config, stripped_settings
-
-
-def _sanitize_path_for_prefix(path: Optional[Path]) -> str:
-    """Sanitize a path for use in batch state file names.
-
-    Replaces slashes, tildes, and other unsafe characters with underscores.
-    Returns empty string if path is None.
-    """
-    if path is None:
-        return ""
-    # Convert to string and replace unsafe characters
-    s = str(path)
-    # Replace common path separators and special chars
-    for char in "/\\~:":
-        s = s.replace(char, "_")
-    # Remove leading/trailing underscores and collapse multiple underscores
-    import re
-    s = re.sub(r"_+", "_", s).strip("_")
-    return s
 
 
 def execute_run_workflow(
@@ -591,16 +575,6 @@ def execute_run_workflow(
             if judge_output_path:
                 judge_output_path = out_dir / judge_output_path
 
-        # Compute full batch prefix if llm_batch_prefix is set
-        if effective_llm_config.parasail.llm_batch_prefix:
-            resolved_filebase = clean_settings.get("filebase", "").replace("{_name}", config.name)
-            effective_llm_config = _apply_batch_prefix(
-                effective_llm_config,
-                out_dir=out_dir,
-                filebase=resolved_filebase,
-                config_name=config.name,
-            )
-
         if nugget_output_path:
             click.echo(f"Nugget output: {nugget_output_path}", err=True)
         if judge_output_path:
@@ -737,49 +711,6 @@ def options_run(workflow_required: bool = False):
     return decorator
 
 
-def _apply_batch_prefix(
-    llm_config: MinimaLlmConfig,
-    out_dir: Optional[Path],
-    filebase: str,
-    config_name: str,
-) -> MinimaLlmConfig:
-    """
-    Compute full batch prefix from llm_batch_prefix + out_dir + filebase + config_name.
-
-    Creates a new config with the computed prefix set in parasail.prefix.
-
-    Args:
-        llm_config: LLM configuration with llm_batch_prefix set
-        out_dir: Output directory (may be None)
-        filebase: Filebase from workflow settings
-        config_name: Configuration/variant name
-
-    Returns:
-        New config with parasail.prefix set to the computed value
-    """
-    from dataclasses import replace
-    from .llm.llm_config import ParasailBatchConfig
-
-    base_prefix = llm_config.parasail.llm_batch_prefix or ""
-    out_dir_part = _sanitize_path_for_prefix(out_dir)
-
-    # Build parts, filtering out empty strings
-    parts = [p for p in [base_prefix, out_dir_part, filebase, config_name] if p]
-    full_prefix = "_".join(parts)
-
-    # Create new parasail config with computed prefix
-    new_parasail = ParasailBatchConfig(
-        llm_batch_prefix=llm_config.parasail.llm_batch_prefix,
-        prefix=full_prefix,
-        state_dir=llm_config.parasail.state_dir,
-        poll_interval_s=llm_config.parasail.poll_interval_s,
-        max_poll_hours=llm_config.parasail.max_poll_hours,
-    )
-
-    click.echo(f"Batch prefix: {full_prefix}", err=True)
-    return replace(llm_config, parasail=new_parasail)
-
-
 def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
     """
     Create a Click command group for an AutoJudge with subcommands:
@@ -864,46 +795,5 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
     def run_cmd(**kwargs):
         """Run judge according to workflow.yml (default command)."""
         execute_run_workflow(auto_judge=auto_judge, **kwargs)
-
-    @cli.command("batch-status")
-    @option_llm_config()
-    @click.option("--cancel", type=str, metavar="PREFIX", help="Cancel batch for PREFIX and delete local state.")
-    @click.option("--cancel-remote", type=str, metavar="BATCH_ID", help="Cancel a remote batch by ID.")
-    @click.option("--cancel-all", is_flag=True, help="Cancel ALL local batches.")
-    def batch_status_cmd(
-        llm_config: Optional[Path],
-        cancel: Optional[str],
-        cancel_remote: Optional[str],
-        cancel_all: bool,
-    ):
-        """Show status of all Parasail batches.
-
-        By default, lists all local batch state files and checks remote status
-        for any active batches.
-        """
-        try:
-            from .llm.batch import (
-                batch_status_overview,
-                cancel_batch,
-                cancel_all_batches,
-                cancel_all_local_batches,
-            )
-        except ImportError:
-            raise click.ClickException(
-                "Batch management requires minima-llm package. "
-                "Install with: pip install minima-llm"
-            )
-
-        resolved_config = _resolve_llm_config(llm_config, submission=False)
-
-        if cancel:
-            cancel_all_batches(resolved_config, prefix=cancel)
-        elif cancel_remote:
-            cancel_batch(cancel_remote, resolved_config)
-        elif cancel_all:
-            cancel_all_local_batches(resolved_config)
-        else:
-            # Default: show overview of all batches
-            batch_status_overview(resolved_config)
 
     return cli
