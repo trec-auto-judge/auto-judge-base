@@ -487,6 +487,7 @@ def execute_run_workflow(
     limit_topics: Optional[int] = None,
     limit_runs: Optional[int] = None,
     topic_ids: Optional[Tuple[str, ...]] = None,
+    run_ids: Optional[Tuple[str, ...]] = None,
     wf=None,
     # Modular protocol implementations (alternative to auto_judge)
     nugget_creator=None,  # NuggetCreatorProtocol
@@ -656,6 +657,7 @@ def execute_run_workflow(
             limit_topics=limit_topics,
             limit_runs=limit_runs,
             topic_ids=topic_ids,
+            run_ids=run_ids,
             # Modular protocol implementations
             nugget_creator=nugget_creator,
             qrels_creator=qrels_creator,
@@ -679,8 +681,10 @@ def options_run(workflow_required: bool = False):
         # Apply options in reverse order (bottom-up)
         func = click.option("--limit-runs", type=int, default=None,
                           help="Limit to first N run_ids (for testing).")(func)
-        func = click.option("--topics", "topic_ids", type=str, multiple=True, default=None,
-                          help="Run only on these specific topic IDs (repeatable, for testing).")(func)
+        func = click.option("--run", "run_ids", type=str, multiple=True, default=None,
+                          help="Run only on these specific run IDs (repeatable).")(func)
+        func = click.option("--topic", "topic_ids", type=str, multiple=True, default=None,
+                          help="Run only on these specific topic IDs (repeatable).")(func)
         func = click.option("--limit-topics", type=int, default=None,
                           help="Limit to first N topics (for testing).")(func)
         func = click.option("--augment-report/--no-augment-report", "augment_report",

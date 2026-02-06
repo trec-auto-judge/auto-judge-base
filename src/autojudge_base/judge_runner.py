@@ -74,6 +74,7 @@ def run_judge(
     limit_topics: Optional[int] = None,
     limit_runs: Optional[int] = None,
     topic_ids: Optional[Sequence[str]] = None,
+    run_ids: Optional[Sequence[str]] = None,
     # Modular protocol implementations (alternative to auto_judge)
     nugget_creator=None,  # NuggetCreatorProtocol
     qrels_creator=None,   # QrelsCreatorProtocol
@@ -103,7 +104,8 @@ def run_judge(
         config_name: Variant/sweep name for reproducibility tracking (default: "default")
         limit_topics: If set, limit to first N topics (for testing)
         limit_runs: If set, limit to first N run_ids (for testing)
-        topic_ids: If set, only run on these specific topic IDs (for testing)
+        topic_ids: If set, only run on these specific topic IDs
+        run_ids: If set, only run on these specific run IDs
 
     Returns:
         JudgeResult with leaderboard, qrels, and final nuggets
@@ -134,6 +136,13 @@ def run_judge(
         limited_run_ids = set(seen_run_ids[:limit_runs])
         rag_responses = [r for r in rag_responses if r.metadata.run_id in limited_run_ids]
         print(f"[judge_runner] Limited to first {limit_runs} runs: {sorted(limited_run_ids)}", file=sys.stderr)
+
+    # Apply explicit run filter if specified
+    if run_ids is not None and len(run_ids) > 0:
+        run_ids_set = set(run_ids)
+        rag_responses = list(rag_responses)  # Ensure list for filtering
+        rag_responses = [r for r in rag_responses if r.metadata.run_id in run_ids_set]
+        print(f"[judge_runner] Filtered to explicit runs: {sorted(run_ids_set)}", file=sys.stderr)
 
     # Default force_recreate_nuggets to do_create_nuggets if not explicitly set
     # This ensures fresh nugget creation uses prompt cache, not stale nugget files

@@ -143,7 +143,34 @@ class Report(BaseModel):
     
     def get_sentences(self) ->List[str]:
         return [s.text for s in self.responses]
-    
+
+    def get_sentences_with_citations(self) -> List[NeuclirReportSentence]:
+        """Get all sentences with citations in unified format.
+
+        Returns NeuclirReportSentence objects where citations is List[str]
+        ordered by priority. Does not modify the underlying report data.
+
+        Handles all sentence formats:
+        - NeuclirReportSentence: returned as-is
+        - RagtimeReportSentence: citations sorted by confidence (descending)
+        - Rag24ReportSentence: indices resolved to doc_ids via report.references
+        """
+        references = self.references or []
+        result: List[NeuclirReportSentence] = []
+
+        for r in self.responses:
+            if isinstance(r, NeuclirReportSentence):
+                result.append(r)
+            elif isinstance(r, RagtimeReportSentence):
+                citation_confidences = r.citations.items() if r.citations else []
+                sorted_ids = [eid for eid, conf in sorted(citation_confidences, key=lambda kv: kv[1], reverse=True)]
+                result.append(NeuclirReportSentence(text=r.text, citations=sorted_ids, metadata=r.metadata, evaldata=r.evaldata))
+            elif isinstance(r, Rag24ReportSentence):
+                doc_ids = [references[i] for i in (r.citations or []) if 0 <= i < len(references)]
+                result.append(NeuclirReportSentence(text=r.text, citations=doc_ids, metadata=r.metadata, evaldata=r.evaldata))
+
+        return result
+
     def autofill_references(self):
         ragtime_citation_set:Set[str] = {c for r in self.responses \
                             for c in r.citations.keys()   
@@ -160,18 +187,38 @@ class Report(BaseModel):
         self.responses=None
 
     def switch_to_neuclir_responses(self):
-        def convert_response_sentences(responses:List[RagtimeReportSentence|NeuclirReportSentence])->List[NeuclirReportSentence]:
-            neuclir_responses:List[NeuclirReportSentence] = list()
-            for r in responses: # TODO or self.answer:
-                if isinstance(r, RagtimeReportSentence):
-                    citation_confidences = r.citations.items() if r.citations else []
-                    sorted_ids = [eid for eid, conf in sorted(citation_confidences, key=lambda kv: kv[1], reverse=True)]
-                    neuclir_responses.append(NeuclirReportSentence(text=r.text, citations=sorted_ids))
-            return neuclir_responses
+        """Convert all sentence formats to NeuclirReportSentence.
+
+        After calling this method, all sentences in report.responses will be
+        NeuclirReportSentence with citations as List[str] ordered by priority.
+
+        Handles:
+        - RagtimeReportSentence: sorts citations by confidence (descending)
+        - Rag24ReportSentence: resolves indices to doc_ids via report.references
+        - NeuclirReportSentence: passes through unchanged
+        """
+        references = self.references or []
+
+        def convert_sentence(r: ReportSentence) -> NeuclirReportSentence:
+            if isinstance(r, NeuclirReportSentence):
+                return r
+            elif isinstance(r, RagtimeReportSentence):
+                # Sort by confidence descending
+                citation_confidences = r.citations.items() if r.citations else []
+                sorted_ids = [eid for eid, conf in sorted(citation_confidences, key=lambda kv: kv[1], reverse=True)]
+                return NeuclirReportSentence(text=r.text, citations=sorted_ids, metadata=r.metadata, evaldata=r.evaldata)
+            elif isinstance(r, Rag24ReportSentence):
+                # Resolve indices to doc_ids
+                doc_ids = [references[i] for i in (r.citations or []) if 0 <= i < len(references)]
+                return NeuclirReportSentence(text=r.text, citations=doc_ids, metadata=r.metadata, evaldata=r.evaldata)
+            else:
+                raise RuntimeError(f"Unknown sentence type: {type(r)}")
+
+        def convert_response_sentences(responses: List[ReportSentence]) -> List[NeuclirReportSentence]:
+            return [convert_sentence(r) for r in responses]
 
         if self.responses is not None:
             self.responses = convert_response_sentences(self.responses)
-            # print(f"convert_response_sentences to neuclir: {self.responses[0]}")
         elif self.answer is not None:
             self.answer = convert_response_sentences(self.answer)
         else:
