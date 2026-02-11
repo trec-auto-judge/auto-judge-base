@@ -1,243 +1,109 @@
-# Implementing an AutoJudge
+# AutoJudge Workflow Guide
 
-This guide explains how to implement an AutoJudge, declare nugget bank formats, and configure workflow pipelines.
+## Quick Start
 
-## AutoJudge Protocol
-
-Every judge implements the `AutoJudge` protocol with two methods:
+A judge is any class with a `judge()` method that returns a `Leaderboard`:
 
 ```python
-class AutoJudge(Protocol):
-    nugget_banks_type: Type[NuggetBanksProtocol]  # Optional: declare nugget format
+from autojudge_base import Leaderboard, LeaderboardBuilder, LeaderboardSpec, MeasureSpec
 
-    def judge(self, rag_responses, rag_topics, llm_config, nugget_banks=None, qrels=None, **kwargs):
-        """Score RAG responses. Returns Leaderboard."""
-        ...
+MY_SPEC = LeaderboardSpec(measures=(MeasureSpec("MY_SCORE"),))
 
-    def create_nuggets(self, rag_responses, rag_topics, llm_config, nugget_banks=None, **kwargs):
-        """Create or refine nugget banks based on RAG responses. Returns NuggetBanks or None."""
-        ...
-
-    def create_qrels(self, rag_responses, rag_topics, llm_config, nugget_banks=None, **kwargs):
-        """Create relevance judgments (qrels). Returns Qrels or None."""
-        ...
-```
-
-## Minimal Judge (No Nuggets)
-
-If your judge doesn't use nuggets, omit `nugget_banks_type`:
-
-```python
-from trec_auto_judge import Leaderboard
-
-class SimpleJudge:
+class MyJudge:
     def judge(self, rag_responses, rag_topics, llm_config, **kwargs):
-        leaderboard = ...  # Score responses
-        return leaderboard
+        builder = LeaderboardBuilder(MY_SPEC)
+        for response in rag_responses:
+            score = evaluate(response)
+            builder.add(run_id=response.metadata.run_id,
+                        topic_id=response.metadata.topic_id,
+                        values={"MY_SCORE": score})
+        topic_ids = [t.request_id for t in rag_topics]
+        return builder.build(expected_topic_ids=topic_ids, on_missing="fix_aggregate")
 
-    def create_nuggets(self, rag_responses, rag_topics, llm_config, **kwargs):
+    def create_nuggets(self, *args, **kwargs):
         return None
 
-    def create_qrels(self, rag_responses, rag_topics, llm_config, **kwargs):
+    def create_qrels(self, *args, **kwargs):
         return None
 ```
 
-## Judge with Nuggets
-
-### Step 1: Declare the Nugget Format
-
-Set `nugget_banks_type` to declare which format your judge uses:
-
-```python
-from typing import Type
-from trec_auto_judge import NuggetBanks
-from trec_auto_judge.nugget_data import NuggetBanksProtocol
-
-class MyJudge:
-    nugget_banks_type: Type[NuggetBanksProtocol] = NuggetBanks
-```
-
-Available formats:
-- `NuggetBanks` - AutoARGUE format (questions, claims, answers, references)
-- `NuggetizerNuggetBanks` - Nuggetizer format (simpler text-based nuggets)
-
-### Step 2: Implement create_nuggets()
-
-```python
-from trec_auto_judge.nugget_data import NuggetBanks, NuggetBank, NuggetQuestion
-
-class MyJudge:
-    nugget_banks_type: Type[NuggetBanksProtocol] = NuggetBanks
-
-    def create_nuggets(self, rag_responses, rag_topics, llm_config, nugget_banks=None, **kwargs):
-        banks = []
-        for topic in rag_topics:
-            bank = NuggetBank(query_id=topic.request_id, title_query=topic.title)
-
-            # Generate/refine nuggets based on responses (e.g., via LLM)
-            questions = generate_questions(topic, rag_responses, llm_config)
-            bank.add_nuggets(questions)
-
-            banks.append(bank)
-
-        return NuggetBanks.from_banks_list(banks)
-```
-
-### Step 3: Implement judge()
-
-```python
-def judge(self, rag_responses, rag_topics, llm_config, nugget_banks=None, qrels=None, **kwargs):
-    scores = {}
-
-    for response in rag_responses:
-        topic_id = response.metadata.topic_id
-
-        # Get nuggets for this topic
-        if nugget_banks:
-            topic_nuggets = nugget_banks.banks.get(topic_id)
-            score = evaluate_with_nuggets(response, topic_nuggets, llm_config)
-        else:
-            score = evaluate_without_nuggets(response, llm_config)
-
-        # Optionally use qrels from create_qrels() phase
-        if qrels:
-            score = adjust_score_with_qrels(score, qrels, topic_id)
-
-        scores[topic_id] = score
-
-    leaderboard = build_leaderboard(scores)
-    return leaderboard
-```
-
-### Step 4: Register the CLI
-
-```python
-# judge.py
-from trec_auto_judge import auto_judge_to_click_command
-from my_judge import MyJudge
-
-cli = auto_judge_to_click_command(MyJudge(), "my-judge")
-
-if __name__ == "__main__":
-    cli()
-```
-
-## Workflow Declaration
-
-Create `workflow.yml` to declare how your judge uses nuggets. The workflow uses boolean flags:
+Register in `workflow.yml` and run:
 
 ```yaml
-create_nuggets: true   # Call create_nuggets() to generate/refine nuggets
-judge: true            # Call judge() to produce leaderboard/qrels
+judge_class: "judges.myjudge.MyJudge"
 ```
 
-### Common Workflow Configurations
-
-| Configuration | create_nuggets | judge | Description |
-|--------------|----------------|-------|-------------|
-| Judge only | `false` | `true` | Judge doesn't use nuggets |
-| Nuggify then judge | `true` | `true` | Create nuggets, then judge with them |
-| Nuggify only | `true` | `false` | Just create nuggets, no judging |
-
-### Judge Only (Default)
-
-Judge doesn't use nuggets at all.
-
-```yaml
-create_nuggets: false
-judge: true
+```bash
+auto-judge run --workflow workflow.yml \
+    --rag-responses runs/ --rag-topics topics.jsonl --out-dir ./output/
 ```
 
-### Nuggify Then Judge
+## workflow.yml
 
-Create nuggets first, then judge using them. Most common for nugget-based evaluation.
+The workflow file controls the judge pipeline. At minimum it declares which class to use:
 
 ```yaml
-create_nuggets: true
-judge: true
+judge_class: "judges.myjudge.MyJudge"
 ```
 
-### Nuggify Only
+### Execution Phases
 
-Create nuggets without judging (useful for nugget bank preparation).
+The framework runs up to three phases in order: (1) nuggets, (2) qrels, (3) leaderboard.
+
+| Configuration | create_nuggets | create_qrels | judge | Description |
+|--------------|----------------|--------------|-------|-------------|
+| Judge only | `false` | `false` | `true` | Score responses directly |
+| Nuggets + judge | `true` | `false` | `true` | Create nuggets, then judge with them |
+| Full pipeline | `true` | `true` | `true` | Nuggets, then qrels, then judge |
+| Nuggets only | `true` | `false` | `false` | Create nugget banks without judging |
+
+If `create_nuggets` / `create_qrels` are omitted, they are derived from the lifecycle flags: `create_nuggets` defaults to `judge_uses_nuggets or qrels_uses_nuggets`, and `create_qrels` defaults to `judge_uses_qrels`.
+
+### Settings
+
+Pass hyperparameters via settings dicts. Phase-specific settings override shared ones:
 
 ```yaml
-create_nuggets: true
-judge: false
-```
-
-## Settings and Parameters
-
-Pass hyperparameters to `create_nuggets()` and `judge()` via settings dicts:
-
-```yaml
-create_nuggets: true
-judge: true
-
-# Shared settings (passed to both phases as fallback)
 settings:
   filebase: "{_name}"
   top_k: 20
 
-# Phase-specific settings (override shared settings)
 nugget_settings:
   extraction_style: "thorough"
 
 judge_settings:
   threshold: 0.5
+
+qrels_settings:
+  grade_range: [0, 3]
 ```
 
-Settings are passed to AutoJudge methods as `**kwargs`:
-- `judge()` receives `**(judge_settings or settings or {})`
-- `create_nuggets()` receives `**(nugget_settings or settings or {})`
+Settings are passed as `**kwargs` to the corresponding method:
+- `judge()` receives `judge_settings` merged over `settings`
+- `create_nuggets()` receives `nugget_settings` merged over `settings`
+- `create_qrels()` receives `qrels_settings` merged over `settings`
 
-### Built-in Variables
-
-Use `{variable}` syntax for template substitution in string values:
+**Template variables** use `{variable}` syntax in string values:
 
 | Variable | Description |
 |----------|-------------|
 | `{_name}` | Configuration name ("default", variant name, or sweep name) |
-| `{_nugget_filebase}` | Resolved nugget filebase (available in judge_settings) |
+| `{_nugget_filebase}` | Resolved nugget output path (available in judge/qrels settings) |
+| `{_qrels_filebase}` | Resolved qrels output path (available in judge settings) |
 
-User-defined parameters are also available: `{top_k}` expands to the value of `top_k`.
+User-defined parameters are also available: `{top_k}` expands to the value of `top_k`. Parameters starting with `_` are reserved for built-ins.
 
-**Note**: Parameters starting with `_` are reserved for built-ins and will cause a validation error.
-
-### Naming Conventions
-
-- **Parameters**: `snake_case` (e.g., `top_k`, `extraction_style`)
-- **Variant/sweep names**: `train-case` (e.g., `ans-r`, `top-k-sweep`)
-
-### Framework-Consumed Settings
-
-Some settings are consumed by the framework and not passed to AutoJudge methods:
+**Framework-consumed settings** are processed by the framework and not passed to judge methods:
 
 | Setting | Description |
 |---------|-------------|
-| `llm_model` | Override the model in `llm_config`. Applies to both phases. |
+| `llm_model` | Override `llm_config.model` for this run |
 
-Example - run the same judge with different models:
+### Variants
 
-```yaml
-settings:
-  llm_model: "gpt-4o"
-
-sweeps:
-  model-comparison:
-    llm_model: ["gpt-4o", "claude-3-opus", "llama-3.1-70b"]
-```
-
-The `llm_model` setting overrides `llm_config.model` (from `llm-config.yml` or environment). This allows organizers to sweep over models without modifying the judge's LLM configuration file.
-
-## Variants
-
-Define named configurations that override base settings:
+Named configurations that override base settings:
 
 ```yaml
-create_nuggets: true
-judge: true
-
 settings:
   threshold: 0.5
   filebase: "{_name}"
@@ -246,362 +112,214 @@ variants:
   strict:
     threshold: 0.8
 
-  ans-r:
-    prompt: "AnswerR"
-    threshold: 0.7
+  lenient:
+    threshold: 0.3
     judge_settings:
       use_citations: true
 ```
 
-Run a specific variant:
+Variants can override shared settings and also include `nugget_settings`, `judge_settings`, or `qrels_settings` blocks.
+
 ```bash
-./judge.py run --workflow workflow.yml --variant strict ...
+auto-judge run --workflow workflow.yml --variant strict ...
+auto-judge run --workflow workflow.yml --all-variants ...
 ```
 
-Run all variants:
-```bash
-./judge.py run --workflow workflow.yml --all-variants ...
-```
+### Parameter Sweeps
 
-## Parameter Sweeps
-
-Define parameter combinations for grid search:
+Grid search over parameter combinations:
 
 ```yaml
 sweeps:
-  top-k-sweep:
-    top_k: [10, 20, 50]
-
   threshold-grid:
     top_k: [10, 20]
     threshold: [0.3, 0.5, 0.8]
 ```
 
-Run a sweep (executes all combinations):
 ```bash
-./judge.py run --workflow workflow.yml --sweep threshold-grid ...
+auto-judge run --workflow workflow.yml --sweep threshold-grid ...
 ```
 
-The `threshold-grid` sweep produces 6 configurations (2 x 3 cartesian product).
+This produces 6 configurations (2 x 3 cartesian product), each with a unique `{_name}`.
 
-## Lifecycle Flags
+## Adding Nuggets
 
-Control nugget/qrels creation and usage behavior:
+Set `create_nuggets: true` and declare a `nugget_banks_type`:
+
+```yaml
+judge_class: "judges.myjudge.MyJudge"
+create_nuggets: true
+judge: true
+```
+
+```python
+from autojudge_base import NuggetBanks, NuggetBanksProtocol
+
+class MyJudge:
+    nugget_banks_type: Type[NuggetBanksProtocol] = NuggetBanks
+
+    def create_nuggets(self, rag_responses, rag_topics, llm_config,
+                       nugget_banks=None, **kwargs):
+        banks = []
+        for topic in rag_topics:
+            bank = NuggetBank(query_id=topic.request_id, title_query=topic.title)
+            bank.add_nuggets(generate_questions(topic, llm_config))
+            banks.append(bank)
+        return NuggetBanks.from_banks_list(banks)
+
+    def judge(self, rag_responses, rag_topics, llm_config,
+              nugget_banks=None, **kwargs):
+        # Use nugget_banks.banks[topic_id] to score responses
+        ...
+```
+
+The framework saves nuggets to `{filebase}.nuggets.jsonl` and passes them to `judge()`. The nugget format is determined by `nugget_banks_type` on the judge class (or `nugget_banks_type` in workflow.yml for workflow-level override).
+
+Available formats:
+- `NuggetBanks` — questions, claims, answers, references (default)
+- `NuggetizerNuggetBanks` — simpler text-based nuggets
+- Custom formats implementing `NuggetBanksProtocol`
+
+### Nugget Bank Input
+
+Use `--nugget-banks <path>` to supply a pre-existing nugget bank:
+
+```bash
+# Judge with externally-provided nuggets
+auto-judge run --workflow workflow.yml \
+    --nugget-banks my_nuggets.nuggets.jsonl ...
+
+# Refine existing nuggets, then judge
+auto-judge run --workflow workflow.yml \
+    --nugget-banks seed.nuggets.jsonl --store-nuggets refined.nuggets.jsonl ...
+```
+
+**Resolution order:** (1) `--nugget-banks` CLI path, (2) auto-loaded from `{filebase}.nuggets.jsonl` if it exists from a previous run, (3) created fresh by `create_nuggets()`, (4) `None`.
+
+When a nugget file already exists and `create_nuggets: true`, the framework loads it instead of recreating (saving LLM calls). Use `--force-recreate-nuggets` to override. Same applies to qrels with `--force-recreate-qrels`.
+
+### Nugget/Qrels Path Overrides
+
+Override default paths in workflow.yml:
+
+```yaml
+nugget_input: "shared_nuggets.nuggets.jsonl"     # Load existing nuggets
+nugget_output: "my_nuggets.nuggets.jsonl"         # Override output path
+qrels_input: "existing.qrels"                     # Load existing qrels
+qrels_output: "my_output.qrels"                   # Override output path
+```
+
+These support template variables (e.g., `nugget_output: "{_name}.nuggets.jsonl"`).
+
+## Adding Qrels
+
+Enable a separate relevance-judgment phase between nuggets and leaderboard:
 
 ```yaml
 create_nuggets: true
-create_qrels: false
+create_qrels: true
 judge: true
 
-# Lifecycle flags
-nugget_depends_on_responses: true   # Pass responses to create_nuggets() (default: true)
-judge_uses_nuggets: true            # Pass nuggets to judge() (default: true)
-judge_uses_qrels: true              # Pass qrels to judge() (default: true)
-qrels_uses_nuggets: true            # Pass nuggets to create_qrels() (default: true)
-force_recreate_nuggets: false       # Recreate nuggets even if file exists (default: false)
-force_recreate_qrels: false         # Recreate qrels even if file exists (default: false)
-augment_report: false               # Save Report to file (default: false)
+qrels_settings:
+  grade_range: [0, 3]
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
+```python
+def create_qrels(self, rag_responses, rag_topics, llm_config,
+                 nugget_banks=None, **kwargs):
+    # Return Qrels object with per-document relevance grades
+    ...
+```
+
+Execution order: `create_nuggets()` -> `create_qrels(nuggets)` -> `judge(nuggets, qrels)`
+
+## Lifecycle Flags
+
+Fine-grained control over what data flows between phases:
+
+| Flag | Default | Effect |
+|------|---------|--------|
 | `nugget_depends_on_responses` | `true` | If false, `create_nuggets()` receives `rag_responses=None` |
 | `judge_uses_nuggets` | `true` | If false, `judge()` receives `nugget_banks=None` |
 | `judge_uses_qrels` | `true` | If false, `judge()` receives `qrels=None` |
 | `qrels_uses_nuggets` | `true` | If false, `create_qrels()` receives `nugget_banks=None` |
-| `force_recreate_nuggets` | `false` | If true, recreate nuggets even if output file exists |
-| `force_recreate_qrels` | `false` | If true, recreate qrels even if output file exists |
-| `augment_report` | `false` | If true, save modified `Report.evaldata` to `{filebase}.responses.jsonl` |
+| `force_recreate_nuggets` | `false` | Recreate nuggets even if output file exists |
+| `force_recreate_qrels` | `false` | Recreate qrels even if output file exists |
+| `augment_report` | `false` | Save modified `Report.evaldata` to `{filebase}.responses.jsonl` |
 
-## Qrels Lifecycle
+All lifecycle flags can be overridden via CLI (e.g., `--no-judge-uses-nuggets`, `--augment-report`).
 
-The framework supports a separate qrels creation phase via `create_qrels()`. This allows creating relevance judgments independently from the final leaderboard computation.
+## Modular Protocol Classes
 
-**Execution order**: (1) nuggets → (2) qrels → (3) leaderboard
-
-### Enabling Qrels Creation
+By default, `judge_class` handles all three phases. For separate implementations, use:
 
 ```yaml
-create_nuggets: true
-create_qrels: true
-judge: true
-
-qrels_settings:
-  grade_range: [0, 3]  # Valid relevance grades (min, max)
+nugget_class: "judges.my_nuggets.NuggetCreator"
+qrels_class: "judges.my_qrels.QrelsCreator"
+judge_class: "judges.my_judge.LeaderboardJudge"
 ```
 
-### Implementing create_qrels()
+Each class only needs to implement its respective protocol method. If `nugget_class` or `qrels_class` is omitted, `judge_class` is used as fallback (assuming it implements all protocols).
 
-```python
-from trec_auto_judge import Qrels
+## CLI Reference
 
-def create_qrels(self, rag_responses, rag_topics, llm_config, nugget_banks=None, **kwargs):
-    grade_range = kwargs.get("grade_range", [0, 3])
-
-    qrels_entries = []
-    for response in rag_responses:
-        topic_id = response.metadata.topic_id
-
-        # Generate relevance judgment using nuggets
-        if nugget_banks:
-            relevance = judge_with_nuggets(response, nugget_banks.banks.get(topic_id))
-        else:
-            relevance = judge_without_nuggets(response)
-
-        # Clamp to grade range
-        relevance = max(grade_range[0], min(grade_range[1], relevance))
-        qrels_entries.append((topic_id, response.doc_id, relevance))
-
-    return Qrels.from_entries(qrels_entries)
-```
-
-### Qrels-Specific Settings
-
-Pass settings to `create_qrels()` via `qrels_settings`:
-
-```yaml
-create_qrels: true
-
-qrels_settings:
-  grade_range: [0, 3]
-  use_strict_matching: true
-```
-
-CLI override:
-```bash
-./judge.py run --workflow workflow.yml --qset grade_range=[0,4] ...
-```
-
-### Qrels Input/Output Paths
-
-Specify explicit paths for qrels files:
-
-```yaml
-create_qrels: true
-
-qrels_input: existing_qrels.qrels    # Load existing qrels for refinement
-qrels_output: output_qrels.qrels     # Where to save created qrels
-```
-
-### Common Qrels Configurations
-
-| Configuration | create_qrels | judge_uses_qrels | Description |
-|--------------|--------------|------------------|-------------|
-| No qrels | `false` | `true` | Default - judge produces leaderboard only |
-| Create qrels | `true` | `true` | Create qrels, then pass to judge |
-| Qrels only | `true` | `false` | Create qrels, don't pass to judge |
-
-### Workflow Example: Full Pipeline
-
-```yaml
-create_nuggets: true
-create_qrels: true
-judge: true
-
-# Nuggets flow to qrels, qrels flow to judge
-qrels_uses_nuggets: true
-judge_uses_qrels: true
-judge_uses_nuggets: true
-
-settings:
-  filebase: "{_name}"
-
-qrels_settings:
-  grade_range: [0, 3]
-```
-
-This runs: `create_nuggets()` → `create_qrels(nuggets)` → `judge(nuggets, qrels)`
-
-### Augmented Responses
-
-Some judges annotate `Report.evaldata` during judging (e.g., storing per-response scores, explanations, or intermediate results). Set `augment_report: true` to save these annotations:
-
-```yaml
-create_nuggets: false
-judge: true
-augment_report: true  # Save Report.evaldata to {filebase}.responses.jsonl
-```
-
-The judge modifies `Report.evaldata` in-place during `judge()`, then the framework writes all responses to `{filebase}.responses.jsonl`.
-
-CLI flag overrides workflow setting:
-```bash
-./judge.py run --workflow workflow.yml --augment-report ...
-./judge.py run --workflow workflow.yml --no-augment-report ...
-```
-
-### Auto-Load Behavior
-
-When `create_nuggets: true` and a nugget file already exists:
-- **Default**: Load existing nuggets instead of recreating (saves LLM calls)
-- **With `--force-recreate-nuggets`**: Recreate nuggets anyway
-
-CLI flag overrides workflow setting:
-```bash
-./judge.py run --workflow workflow.yml --force-recreate-nuggets ...
-```
-
-### Providing a Nugget Bank as Input
-
-Use `--nugget-banks <path>` to supply a pre-existing nugget bank file (JSONL) or directory as input. The input nuggets are passed to `create_nuggets()` (for refinement) and/or to `judge()` (for scoring), depending on workflow flags.
+### Subcommands
 
 ```bash
-# Judge using a pre-existing nugget bank (no nugget creation)
-auto-judge run --workflow workflow.yml \
-    --rag-responses runs/ --rag-topics topics.jsonl \
-    --nugget-banks my_nuggets.nuggets.jsonl
-
-# Refine existing nuggets, then judge with the refined version
-auto-judge run --workflow workflow.yml \
-    --rag-responses runs/ --rag-topics topics.jsonl \
-    --nugget-banks seed_nuggets.nuggets.jsonl \
-    --store-nuggets refined.nuggets.jsonl
+auto-judge run      # Execute workflow.yml (default)
+auto-judge judge    # Judge with existing nuggets (--nugget-banks required)
+auto-judge nuggify  # Create nuggets only (--store-nuggets required)
 ```
 
-**Nugget bank resolution order:**
-1. `--nugget-banks <path>` — explicitly provided input nuggets
-2. Auto-loaded from `{filebase}.nuggets.jsonl` — if the file exists from a previous run and `create_nuggets: true`
-3. Created fresh by `create_nuggets()` — if no existing file and `create_nuggets: true`
-4. `None` — if `create_nuggets: false` and no `--nugget-banks` provided
+### Key Options
 
-## Running the Judge
+**Data input:**
+- `--rag-responses PATH` — responses file or directory
+- `--rag-topics PATH` — topics JSONL file
+- `--nugget-banks PATH` — input nugget banks (file or directory)
+- `--llm-config PATH` — LLM configuration YAML
 
-### CLI Subcommands
+**Output:**
+- `--out-dir PATH` — parent directory for all output files
+- `--filebase STR` — override output filename template
+- `--store-nuggets PATH` — override nugget output path
 
-```bash
-# Create/refine nuggets only
-./judge.py nuggify --rag-responses runs/ --rag-topics topics.jsonl --store-nuggets nuggets.jsonl
+**Workflow overrides:**
+- `--variant NAME` / `--all-variants` / `--sweep NAME`
+- `--create-nuggets` / `--no-create-nuggets`
+- `--create-qrels` / `--no-create-qrels`
+- `--judge` / `--no-judge`
+- `--force-recreate-nuggets` / `--force-recreate-qrels`
+- `--augment-report` / `--no-augment-report`
+- `--nugget-judge` / `--no-nugget-judge` (alias for `judge_uses_nuggets`)
+- `--nugget-depends-on-responses` / `--no-nugget-depends-on-responses`
+- `--judge-uses-qrels` / `--no-judge-uses-qrels`
+- `--qrels-uses-nuggets` / `--no-qrels-uses-nuggets`
 
-# Judge with existing nuggets
-./judge.py judge --rag-responses runs/ --nugget-banks nuggets.jsonl --output leaderboard.trec
+**Settings overrides (repeatable):**
+- `-S KEY=VALUE` — shared settings
+- `-N KEY=VALUE` — nugget settings
+- `-J KEY=VALUE` — judge settings
+- `-Q KEY=VALUE` — qrels settings
 
-# Execute based on workflow.yml (default command)
-./judge.py run --workflow workflow.yml --rag-responses runs/ --output leaderboard.trec
-
-# Run without subcommand uses 'run' with default workflow (judge only)
-./judge.py --rag-responses runs/ --output leaderboard.trec
-```
-
-### Default Behavior
-
-Running without a subcommand executes `run` with the default workflow (`judge=True, create_nuggets=False`):
-
-```bash
-./judge.py --rag-responses runs/ --output leaderboard.trec
-```
-
-## Directory Structure
-
-```
-trec25/judges/my-judge/
-├── my-judge.py          # Judge implementation
-├── judge.py             # CLI entry point
-├── workflow.yml         # Workflow declaration
-├── llm-config.yml       # LLM configuration (dev vs submission)
-└── requirements.txt
-```
-
-## Configuration Files
-
-**workflow.yml** - Declares the judge's pipeline. Fixed per judge implementation.
-
-**llm-config.yml** - Configures LLM backend. Varies between environments:
-
-```yaml
-# Dev mode (direct config)
-base_url: "http://localhost:8000/v1"
-model: "meta-llama/Llama-3.1-8B-Instruct"
-
-# Submission mode (preferences resolved by organizer)
-model_preferences:
-  - "gpt-4o"
-  - "claude-3-opus"
-```
+**Data filtering (for development):**
+- `--topic ID` — specific topics (repeatable)
+- `--run ID` — specific runs (repeatable)
+- `--limit-topics N` / `--limit-runs N`
 
 ## Output Files
 
-Given a `filebase` setting (e.g., `filebase: "rubric"`), the framework generates:
+Given `filebase: "rubric"`, the framework produces:
 
-| Output | Filename | Condition |
-|--------|----------|-----------|
-| Nugget banks | `{filebase}.nuggets.jsonl` | `create_nuggets: true` |
-| Qrels | `{filebase}.qrels` | `create_qrels: true` |
-| Leaderboard | `{filebase}.judgment.json` | `judge: true` |
-| Run config | `{filebase}.config.yml` | `judge: true` |
-| Augmented responses | `{filebase}.responses.jsonl` | `augment_report: true` |
+| File | Condition |
+|------|-----------|
+| `rubric.nuggets.jsonl` | `create_nuggets: true` |
+| `rubric.qrels` | `create_qrels: true` |
+| `rubric.judgment.json` | `judge: true` |
+| `rubric.config.yml` | always (captures reproducibility info) |
+| `rubric.responses.jsonl` | `augment_report: true` |
 
-Example with `filebase: "rubric"` and all phases enabled:
-```
-rubric.nuggets.jsonl
-rubric.qrels
-rubric.judgment.json
-rubric.config.yml
-```
-
-If `filebase` already has an extension (`.json`, `.jsonl`), it's used as-is.
-
-### Run Configuration File
-
-The `.config.yml` file captures everything needed to reproduce the run:
-
-```yaml
-name: default                    # Variant/sweep name
-create_nuggets: true
-judge: true
-llm_model: gpt-4o
-timestamp: 2024-01-15T10:30:00+00:00
-git:
-  commit: abc123def456...
-  dirty: "false"                 # "true", "false", or "unknown"
-  remote: git@github.com:...     # or "none" or "unknown"
-settings:
-  top_k: 20
-nugget_settings:
-  extraction_style: thorough
-judge_settings:
-  threshold: 0.5
-```
-
-Git info fields:
-- `commit`: Full SHA or "unknown" if not in a git repo
-- `dirty`: Whether there are uncommitted changes
-- `remote`: Origin URL, "none" if no remote, or "unknown" on error
-
-## How Nugget Types Flow
-
-1. **Judge declares**: `nugget_banks_type = NuggetBanks`
-2. **CLI reads**: Stores judge in context, uses its type for `--nugget-banks` loading
-3. **Framework loads**: `load_nugget_banks_generic(path, judge.nugget_banks_type)`
-4. **Judge receives**: Correctly-typed `nugget_banks` in `judge()` and `create_nuggets()`
-5. **Framework saves**: `write_nugget_banks_generic(nuggets, path)` works with any format
-
-The framework handles format dispatch automatically based on your declared type.
-
-## Using Nuggetizer Format
-
-For simpler text-based nuggets:
-
-```python
-from trec_auto_judge.nugget_data import (
-    NuggetizerNuggetBanks,
-    NuggetizerNuggetBank,
-    NuggetizerNugget
-)
-
-class NuggetizerJudge:
-    nugget_banks_type: Type[NuggetBanksProtocol] = NuggetizerNuggetBanks
-
-    def create_nuggets(self, rag_responses, rag_topics, llm_config, **kwargs):
-        banks = []
-        for topic in rag_topics:
-            bank = NuggetizerNuggetBank(qid=topic.request_id, query=topic.title)
-            bank.nuggets = [
-                NuggetizerNugget(text="Key fact 1"),
-                NuggetizerNugget(text="Key fact 2"),
-            ]
-            banks.append(bank)
-        return NuggetizerNuggetBanks.from_banks_list(banks)
-```
+The `.config.yml` records the full configuration (settings, git commit, timestamp, model) for reproducibility.
 
 ## Custom Nugget Formats
 
@@ -610,7 +328,6 @@ To create a custom format, implement `NuggetBanksProtocol`:
 ```python
 from typing import ClassVar, Dict, List, Type
 from pydantic import BaseModel
-from trec_auto_judge.nugget_data.protocols import NuggetBankProtocol, NuggetBanksProtocol
 
 class MyNuggetBank(BaseModel):
     topic_id: str
@@ -634,8 +351,10 @@ class MyNuggetBanks(BaseModel):
         return cls(banks=result)
 ```
 
-Key requirements:
+Requirements:
 - `NuggetBank` must have a `query_id` property
 - `NuggetBanks` must have `_bank_model: ClassVar` pointing to the bank class
 - `NuggetBanks` must have `banks: Dict[str, NuggetBank]` field
 - `NuggetBanks` must have `from_banks_list(banks, overwrite=False)` classmethod
+
+The framework handles serialization/deserialization automatically based on the declared type.
