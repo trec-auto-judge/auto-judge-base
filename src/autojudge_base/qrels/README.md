@@ -162,7 +162,7 @@ Parameters:
 For more granular control or test cases, use the fluent `QrelsVerification` class:
 
 ```python
-from trec_auto_judge.qrels.qrels import QrelsVerification
+from autojudge_base import QrelsVerification
 
 # Chain specific checks
 QrelsVerification(
@@ -217,17 +217,6 @@ Notes:
 
 ---
 
-## Design Philosophy (Why it looks like this)
-
-* **No stringly-typed coupling**: qrels are built from a single `QrelsSpec`, not from parallel dicts.
-* **No hidden policy**: doc_id semantics, hashing, and corpora live outside this module.
-* **Fail fast**: duplicates and missing topics raise immediately.
-* **Composable**: fits naturally alongside leaderboards, judges, and generated-text corpora.
-
-If you already made your Leaderboard safer using verification and spec-based construction, this module is intended to feel familiar.
-
----
-
 ## Typical Usage Pattern
 
 ```python
@@ -235,11 +224,8 @@ If you already made your Leaderboard safer using verification and spec-based con
 qrels = build_qrels(records=annotations, spec=spec)
 
 # 2. Verify coverage
-verify_qrels_topics(
-    expected_topic_ids=[t.query_id for t in topics],
-    qrels=qrels,
-    require_no_extras=True,
-)
+topic_ids = [t.request_id for t in topics]
+qrels.verify(expected_topic_ids=topic_ids, warn=False)
 
 # 3. Serialize
 write_qrel_file(qrel_out_file=output.with_suffix(".qrels"), qrels=qrels)

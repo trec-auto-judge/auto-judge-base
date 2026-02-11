@@ -88,7 +88,7 @@ Your judge receives the resolved `LlmConfigBase` as the third parameter:
 ```python
 from autojudge_base import AutoJudge, LlmConfigBase
 
-class MyJudge(AutoJudge):
+class MyJudge:
     def judge(self, rag_responses, rag_topics, llm_config: LlmConfigBase, **kwargs):
         # llm_config.model contains the resolved model name
         # llm_config.base_url contains the endpoint URL

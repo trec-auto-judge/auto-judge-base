@@ -30,7 +30,7 @@ class MyJudge:
 Register in `workflow.yml` and run:
 
 ```yaml
-judge_class: "judges.myjudge.MyJudge"
+judge_class: "judges.myjudge:MyJudge"
 ```
 
 ```bash
@@ -43,7 +43,7 @@ auto-judge run --workflow workflow.yml \
 The workflow file controls the judge pipeline. At minimum it declares which class to use:
 
 ```yaml
-judge_class: "judges.myjudge.MyJudge"
+judge_class: "judges.myjudge:MyJudge"
 ```
 
 ### Execution Phases
@@ -147,7 +147,7 @@ This produces 6 configurations (2 x 3 cartesian product), each with a unique `{_
 Set `create_nuggets: true` and declare a `nugget_banks_type`:
 
 ```yaml
-judge_class: "judges.myjudge.MyJudge"
+judge_class: "judges.myjudge:MyJudge"
 create_nuggets: true
 judge: true
 ```
@@ -254,9 +254,9 @@ All lifecycle flags can be overridden via CLI (e.g., `--no-judge-uses-nuggets`, 
 By default, `judge_class` handles all three phases. For separate implementations, use:
 
 ```yaml
-nugget_class: "judges.my_nuggets.NuggetCreator"
-qrels_class: "judges.my_qrels.QrelsCreator"
-judge_class: "judges.my_judge.LeaderboardJudge"
+nugget_class: "judges.my_nuggets:NuggetCreator"
+qrels_class: "judges.my_qrels:QrelsCreator"
+judge_class: "judges.my_judge:LeaderboardJudge"
 ```
 
 Each class only needs to implement its respective protocol method. If `nugget_class` or `qrels_class` is omitted, `judge_class` is used as fallback (assuming it implements all protocols).

@@ -70,16 +70,20 @@ See the [auto-judge-starterkit](https://github.com/trec-auto-judge/auto-judge-st
 
 ## CLI
 
+The `trec-auto-judge` CLI (provided by the `trec_auto_judge` package) uses autojudge-base:
+
 ```bash
 # Run a judge workflow
-auto-judge run --workflow workflow.yml --rag-responses responses.jsonl
+trec-auto-judge run --workflow workflow.yml --rag-responses responses.jsonl
 
 # Export corpus
-auto-judge export-corpus --output corpus.tar.gz
+trec-auto-judge export-corpus --output corpus.tar.gz
 
 # List available models
-auto-judge list-models
+trec-auto-judge list-models
 ```
+
+See the [Workflow Guide](src/autojudge_base/workflow/README.md) for details.
 
 ## Data Loading Utilities
 
