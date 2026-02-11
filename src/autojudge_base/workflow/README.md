@@ -441,6 +441,29 @@ CLI flag overrides workflow setting:
 ./judge.py run --workflow workflow.yml --force-recreate-nuggets ...
 ```
 
+### Providing a Nugget Bank as Input
+
+Use `--nugget-banks <path>` to supply a pre-existing nugget bank file (JSONL) or directory as input. The input nuggets are passed to `create_nuggets()` (for refinement) and/or to `judge()` (for scoring), depending on workflow flags.
+
+```bash
+# Judge using a pre-existing nugget bank (no nugget creation)
+auto-judge run --workflow workflow.yml \
+    --rag-responses runs/ --rag-topics topics.jsonl \
+    --nugget-banks my_nuggets.nuggets.jsonl
+
+# Refine existing nuggets, then judge with the refined version
+auto-judge run --workflow workflow.yml \
+    --rag-responses runs/ --rag-topics topics.jsonl \
+    --nugget-banks seed_nuggets.nuggets.jsonl \
+    --store-nuggets refined.nuggets.jsonl
+```
+
+**Nugget bank resolution order:**
+1. `--nugget-banks <path>` — explicitly provided input nuggets
+2. Auto-loaded from `{filebase}.nuggets.jsonl` — if the file exists from a previous run and `create_nuggets: true`
+3. Created fresh by `create_nuggets()` — if no existing file and `create_nuggets: true`
+4. `None` — if `create_nuggets: false` and no `--nugget-banks` provided
+
 ## Running the Judge
 
 ### CLI Subcommands

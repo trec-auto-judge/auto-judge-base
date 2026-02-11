@@ -98,7 +98,8 @@ def read_qrel_file(qrel_file: Union[str, Path]) -> Qrels:
             if len(parts) < 4:
                 continue
             topic_id, _ignored, doc_id, grade = parts[0], parts[1], parts[2], parts[3]
-            rows.append(QrelRow(topic_id=topic_id, doc_id=doc_id, grade=int(grade)))
+            grade_val = int(grade == "True") if grade in ("True", "False") else int(float(grade))
+            rows.append(QrelRow(topic_id=topic_id, doc_id=doc_id, grade=grade_val))
 
     return Qrels(rows=rows)
 

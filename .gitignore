@@ -2,4 +2,4 @@ __pycache__
 .approval_tests_temp
 test-coverage
 .coverage
-.egg-info
+*.egg-info/
