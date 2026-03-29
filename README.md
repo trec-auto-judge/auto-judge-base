@@ -238,11 +238,11 @@ def judge(self, rag_responses, rag_topics, llm_config, **kwargs) -> Leaderboard:
 **Manual file I/O (FYI):** Judge implementations return objects; the framework handles persistence.
 
 ```python
-# Write (formats: "trec_eval", "tot", "ir_measures", "jsonl")
-leaderboard.write(Path("output.eval"), format="trec_eval")
+# Write (formats: "ir_measures", "tot", "ir_measures", "jsonl")
+leaderboard.write(Path("output.eval"), format="ir_measures")
 
 # Load
-leaderboard = Leaderboard.load(Path("output.eval"), format="trec_eval")
+leaderboard = Leaderboard.load(Path("output.eval"), format="ir_measures")
 ```
 
 ### Writing NuggetBanks

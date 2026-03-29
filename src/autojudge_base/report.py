@@ -137,9 +137,12 @@ class Report(BaseModel):
     def get_text(self) -> str:
         return self.get_report_text()
     
-    def get_paragraphs(self) ->List[str]:
-        from nuggety.text_chunker import  get_paragraph_chunks  # Todo this next
-        return get_paragraph_chunks(self.get_text())
+    def get_paragraphs(self) -> List[str]:
+        """Split report text into paragraphs on double-newlines."""
+        import re
+        text = self.get_text()
+        normalized = re.sub(r'\n\s*\n+', '\n\n', text)
+        return [p.strip() for p in normalized.split('\n\n') if p.strip()]
     
     def get_sentences(self) ->List[str]:
         return [s.text for s in self.responses]

@@ -51,7 +51,7 @@ class Leaderboard:
     def write(
         self,
         output: Path,
-        format: LeaderboardFormat = "tot",
+        format: LeaderboardFormat = "ir_measures",
     ) -> None:
         """
         Write the leaderboard as tab-separated lines.

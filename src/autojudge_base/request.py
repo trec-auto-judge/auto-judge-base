@@ -36,7 +36,7 @@ def load_requests_from_irds(ir_dataset)->List[Request]:
 
 def load_requests_from_file(file: Path)->List[Request]:
     ret = list()
-    with open(file) as f:
+    with open(file, encoding="utf-8") as f:
         for l in f:
             parsed = json.loads(l)
             request = Request.model_validate(parsed)
