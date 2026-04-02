@@ -16,7 +16,7 @@ MeasureName = str
 AggFn = Callable[[Sequence[Any]], Any]
 CastFn = Callable[[Any], Any]
 OnMissing = Literal["default", "warn", "error", "fix_aggregate"]
-LeaderboardFormat = Literal["trec_eval", "tot", "ir_measures", "ranking", "jsonl"]
+LeaderboardFormat = Literal["trec_eval", "tot", "ir_measures", "rag4reports", "ranking", "jsonl"]
 
 
 #  ==== DataClasses for data storage and serialization ===  
@@ -75,6 +75,8 @@ class Leaderboard:
                         lines.append("\t".join([m, e.topic_id, str(e.values[m])]))
                     elif format == "ir_measures":
                         lines.append("\t".join([e.run_id, e.topic_id, m, str(e.values[m])]))
+                    elif format == "rag4reports":
+                        lines.append("\t".join([e.topic_id, e.run_id, m, str(e.values[m])]))
                     else:
                         raise ValueError(f"Unknown format: {format!r}")
 
@@ -197,6 +199,10 @@ class Leaderboard:
                 if len(parts) != 4:
                     raise ValueError(format_error_with_hint("ir_measures", 4, len(parts), line, lines))
                 run_id, topic_id, measure, value = parts
+            elif format == "rag4reports":
+                if len(parts) != 4:
+                    raise ValueError(format_error_with_hint("rag4reports", 4, len(parts), line, lines))
+                topic_id, run_id, measure, value = parts
             elif format == "ranking":
                 if len(parts) != 6:
                     raise ValueError(format_error_with_hint("ranking", 6, len(parts), line, lines))

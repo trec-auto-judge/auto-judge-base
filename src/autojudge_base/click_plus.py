@@ -472,6 +472,7 @@ def execute_run_workflow(
     limit_runs: Optional[int] = None,
     topic_ids: Optional[Tuple[str, ...]] = None,
     run_ids: Optional[Tuple[str, ...]] = None,
+    leaderboard_format: Optional[str] = None,
     wf=None,
     # Modular protocol implementations (alternative to auto_judge)
     nugget_creator=None,  # NuggetCreatorProtocol
@@ -636,6 +637,8 @@ def execute_run_workflow(
             nugget_creator=nugget_creator,
             qrels_creator=qrels_creator,
             leaderboard_judge=leaderboard_judge,
+            # Output format
+            leaderboard_format=leaderboard_format,
         )
 
         click.echo(f"Done configuration: {config.name}", err=True)
@@ -653,6 +656,8 @@ def options_run(workflow_required: bool = False):
     """
     def decorator(func):
         # Apply options in reverse order (bottom-up)
+        func = click.option("--leaderboard-format", type=click.Choice(LEADERBOARD_FORMATS), default=None,
+                          help="Leaderboard output format (default: ir_measures).")(func)
         func = click.option("--limit-runs", type=int, default=None,
                           help="Limit to first N run_ids (for testing).")(func)
         func = click.option("--run", "run_ids", type=str, multiple=True, default=None,
@@ -738,6 +743,8 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
     @option_llm_config()
     @option_submission()
     @click.option("--output", type=ExpandedPath(path_type=Path), help="Leaderboard output file.", required=True)
+    @click.option("--leaderboard-format", type=click.Choice(LEADERBOARD_FORMATS), default="ir_measures",
+                  help="Leaderboard output format.")
     def judge_cmd(
         rag_topics: Iterable[Request],
         rag_responses: Iterable[Report],
@@ -745,6 +752,7 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
         llm_config: Optional[Path],
         submission: bool,
         output: Path,
+        leaderboard_format: str,
     ):
         """Judge RAG responses using existing nugget banks."""
         resolved_config = _resolve_llm_config(llm_config, submission)
@@ -758,6 +766,7 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
             judge_output_path=output,
             do_create_nuggets=False,
             do_judge=True,
+            leaderboard_format=leaderboard_format,
         )
 
     @cli.command("nuggify")

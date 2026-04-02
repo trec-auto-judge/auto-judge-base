@@ -52,7 +52,7 @@ class TestAutoJudgeProtocoll(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             filebase = Path(tmp_dir) / "leaderboard"
-            result = runner.invoke(cmd, ["judge", "--rag-responses", str(TREC_25_DATA / "spot-check-dataset" / "runs"), "--output", str(filebase)])
+            result = runner.invoke(cmd, ["judge", "--rag-responses", str(TREC_25_DATA / "spot-check-dataset" / "runs"), "--leaderboard-format", "tot",  "--output", str(filebase)])
 
             print(result.output)
             print(result.exception)

@@ -79,6 +79,8 @@ def run_judge(
     nugget_creator=None,  # NuggetCreatorProtocol
     qrels_creator=None,   # QrelsCreatorProtocol
     leaderboard_judge=None,  # LeaderboardJudgeProtocol
+    # Output format
+    leaderboard_format: Optional[str] = None,
 ) -> JudgeResult:
     """
     Execute judge workflow with nugget lifecycle management.
@@ -311,6 +313,7 @@ def run_judge(
                 leaderboard=leaderboard,
                 rag_topics=rag_topics,
                 judge_output_path=judge_output_path,
+                leaderboard_format=leaderboard_format,
             )
 
             # Step 4: Save augmented responses if flag is set
@@ -331,6 +334,7 @@ def _write_leaderboard(
     leaderboard: Leaderboard,
     rag_topics: Sequence[Request],
     judge_output_path: Path,
+    leaderboard_format: Optional[str] = None,
 ) -> None:
     """Verify and write leaderboard."""
     topic_ids = [t.request_id for t in rag_topics]
@@ -338,8 +342,10 @@ def _write_leaderboard(
     # Resolve output path from filebase
     leaderboard_path = resolve_leaderboard_file_path(judge_output_path)
     leaderboard.verify(expected_topic_ids=topic_ids, on_missing="fix_aggregate")
-    leaderboard.write(leaderboard_path)
-    print(f"[judge_runner] Leaderboard saved to: {leaderboard_path}", file=sys.stderr)
+    # Default to ir_measures if no format specified
+    format_to_use = leaderboard_format or "ir_measures"
+    leaderboard.write(leaderboard_path, format=format_to_use)
+    print(f"[judge_runner] Leaderboard saved to: {leaderboard_path} (format={format_to_use})", file=sys.stderr)
 
 
 def _write_run_config(
