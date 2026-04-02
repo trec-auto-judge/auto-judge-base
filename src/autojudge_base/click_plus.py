@@ -21,7 +21,8 @@ from . import AutoJudge
 
 
 # Leaderboard format constants for CLI options
-LEADERBOARD_FORMATS = ["trec_eval", "ir_measures", "tot", "ranking", "jsonl"]
+# Must match LeaderboardFormat in leaderboard/leaderboard.py
+LEADERBOARD_FORMATS = ["trec_eval", "ir_measures", "tot", "rag4reports", "ranking", "jsonl"]
 
 LEADERBOARD_FORMAT_HELP = (
     "  trec_eval: measure topic value (3 cols, run from filename)\n"
