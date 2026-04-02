@@ -474,6 +474,7 @@ def execute_run_workflow(
     topic_ids: Optional[Tuple[str, ...]] = None,
     run_ids: Optional[Tuple[str, ...]] = None,
     leaderboard_format: Optional[str] = None,
+    leaderboard_file: Optional[Path] = None,
     wf=None,
     # Modular protocol implementations (alternative to auto_judge)
     nugget_creator=None,  # NuggetCreatorProtocol
@@ -567,7 +568,8 @@ def execute_run_workflow(
 
         # Determine output paths: --store-nuggets overrides, otherwise use resolved config
         nugget_output_path = store_nuggets or config.nugget_output_path
-        judge_output_path = config.judge_output_path
+        # --leaderboard-file overrides judge output path
+        judge_output_path = leaderboard_file or config.judge_output_path
 
         # Apply --out-dir prefix to output paths
         if out_dir:
@@ -659,6 +661,7 @@ def options_run(workflow_required: bool = False):
         # Apply options in reverse order (bottom-up)
         func = click.option("--leaderboard-format", type=click.Choice(LEADERBOARD_FORMATS), default=None,
                           help="Leaderboard output format (default: ir_measures).")(func)
+        func = click.option("--leaderboard-file", type=ExpandedPath(path_type=Path), help="Override leaderboard output file path.", required=False)(func)
         func = click.option("--limit-runs", type=int, default=None,
                           help="Limit to first N run_ids (for testing).")(func)
         func = click.option("--run", "run_ids", type=str, multiple=True, default=None,
@@ -737,13 +740,13 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
         ctx.ensure_object(dict)
         ctx.obj["auto_judge"] = auto_judge
 
-    @cli.command("judge")
+    @cli.command("judge", deprecated=True)
     @option_rag_responses()
     @option_rag_topics()
     @option_nugget_banks()
     @option_llm_config()
     @option_submission()
-    @click.option("--output", type=ExpandedPath(path_type=Path), help="Leaderboard output file.", required=True)
+    @click.option("--leaderboard-file", type=ExpandedPath(path_type=Path), help="Leaderboard output file.", required=True)
     @click.option("--leaderboard-format", type=click.Choice(LEADERBOARD_FORMATS), default="ir_measures",
                   help="Leaderboard output format.")
     def judge_cmd(
@@ -752,10 +755,11 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
         nugget_banks,
         llm_config: Optional[Path],
         submission: bool,
-        output: Path,
+        leaderboard_file: Path,
         leaderboard_format: str,
     ):
-        """Judge RAG responses using existing nugget banks."""
+        """[DEPRECATED] Use 'run --no-create-nuggets' instead."""
+        click.echo("Warning: 'judge' command is deprecated. Use 'run --no-create-nuggets' instead.", err=True)
         resolved_config = _resolve_llm_config(llm_config, submission)
 
         run_judge(
@@ -764,13 +768,13 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
             rag_topics=list(rag_topics),
             llm_config=resolved_config,
             nugget_banks_path=nugget_banks,
-            judge_output_path=output,
+            judge_output_path=leaderboard_file,
             do_create_nuggets=False,
             do_judge=True,
             leaderboard_format=leaderboard_format,
         )
 
-    @cli.command("nuggify")
+    @cli.command("nuggify", deprecated=True)
     @option_rag_responses()
     @option_rag_topics()
     @option_nugget_banks()
@@ -785,7 +789,8 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
         submission: bool,
         store_nuggets: Path
     ):
-        """Create or refine nugget banks based on RAG responses."""
+        """[DEPRECATED] Use 'run --create-nuggets --no-judge' instead."""
+        click.echo("Warning: 'nuggify' command is deprecated. Use 'run --create-nuggets --no-judge' instead.", err=True)
         resolved_config = _resolve_llm_config(llm_config, submission)
 
         result = run_judge(
