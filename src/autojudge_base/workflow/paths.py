@@ -30,7 +30,7 @@ def resolve_leaderboard_file_path(filebase: Path) -> Path:
     Returns:
         {filebase}.eval.txt
     """
-    if filebase.name.endswith(".eval.txt"):
+    if filebase.name.endswith(".eval.txt") or filebase.name.endswith(".tsv"):
         return filebase
     return filebase.parent / f"{filebase.name}.eval.txt"
 
@@ -56,7 +56,7 @@ def resolve_qrels_file_path(filebase: Path) -> Path:
     Returns:
         {filebase}.qrels.txt
     """
-    if filebase.name.endswith(".qrels.txt"):
+    if filebase.name.endswith(".qrels.txt") or filebase.name.endswith(".qrels"):
         return filebase
     return filebase.parent / f"{filebase.name}.qrels.txt"
 
