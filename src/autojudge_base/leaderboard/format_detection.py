@@ -5,7 +5,8 @@ file content to suggest the correct format.
 """
 
 from dataclasses import dataclass
-from typing import List, Literal
+from pathlib import Path
+from typing import List, Literal, Optional, Set
 
 LeaderboardFormat = Literal["trec_eval", "tot", "ir_measures", "ranking", "unknown"]
 
@@ -128,6 +129,151 @@ def detect_format(lines: List[str]) -> FormatHint:
     )
 
 
+@dataclass
+class FormatGuess:
+    """Educated guess about format based on topic matching."""
+    likely_format: LeaderboardFormat
+    confidence: str  # "high", "medium", "low"
+    topic_col_matches: dict[int, int]  # col_index -> match_count
+    numeric_cols: List[int]  # columns that appear numeric
+    reason: str
+
+
+def guess_format_by_topics(
+    lines: List[str],
+    known_topics: Set[str],
+    has_header: bool = False,
+) -> FormatGuess:
+    """
+    Make educated guess about tot vs ir_measures based on topic matching.
+
+    For 4-column files:
+    - ir_measures: {run} {topic} {measure} {value} → topic is col 1
+    - tot: {run} {measure} {topic} {value} → topic is col 2
+
+    Counts matches in each column position against known topics.
+    Column with most matches is likely the topic column.
+    Column with only numeric values is likely the value column.
+
+    This is a diagnostic hint, not reliable auto-detection.
+
+    Args:
+        lines: Lines from the file
+        known_topics: Set of expected topic IDs
+        has_header: Whether first line is a header (skip it)
+
+    Returns:
+        FormatGuess with likely format and diagnostic details
+    """
+    if not lines or not known_topics:
+        return FormatGuess(
+            likely_format="unknown",
+            confidence="low",
+            topic_col_matches={},
+            numeric_cols=[],
+            reason="Empty file or no known topics provided",
+        )
+
+    # Parse data rows
+    data_rows = []
+    for i, line in enumerate(lines):
+        if has_header and i == 0:
+            continue
+        line = line.strip()
+        if line and not line.startswith("#"):
+            parts = line.split()
+            if parts:
+                data_rows.append(parts)
+
+    if not data_rows:
+        return FormatGuess(
+            likely_format="unknown",
+            confidence="low",
+            topic_col_matches={},
+            numeric_cols=[],
+            reason="No data rows found",
+        )
+
+    # Get typical column count
+    col_counts = [len(row) for row in data_rows]
+    num_cols = max(set(col_counts), key=col_counts.count)
+
+    if num_cols != 4:
+        # Not a tot/ir_measures ambiguity case
+        return FormatGuess(
+            likely_format="unknown",
+            confidence="low",
+            topic_col_matches={},
+            numeric_cols=[],
+            reason=f"Column count {num_cols} != 4, not tot/ir_measures",
+        )
+
+    # Count topic matches per column
+    topic_matches: dict[int, int] = {0: 0, 1: 0, 2: 0, 3: 0}
+    numeric_counts: dict[int, int] = {0: 0, 1: 0, 2: 0, 3: 0}
+
+    for row in data_rows:
+        if len(row) != 4:
+            continue
+        for col_idx, val in enumerate(row):
+            if val in known_topics:
+                topic_matches[col_idx] += 1
+            try:
+                float(val)
+                numeric_counts[col_idx] += 1
+            except ValueError:
+                pass
+
+    total_rows = len([r for r in data_rows if len(r) == 4])
+
+    # Find which column is likely numeric (value column)
+    numeric_cols = [
+        col for col, count in numeric_counts.items()
+        if total_rows > 0 and count >= total_rows * 0.9  # 90%+ numeric
+    ]
+
+    # Build diagnostic parts
+    diag_parts = []
+    for col_idx in range(4):
+        matches = topic_matches[col_idx]
+        pct = (matches / len(known_topics) * 100) if known_topics else 0
+        diag_parts.append(f"col {col_idx}: {matches}/{len(known_topics)} topics ({pct:.0f}%)")
+
+    if numeric_cols:
+        diag_parts.append(f"numeric columns: {numeric_cols}")
+
+    # Determine likely format based on which column has topic matches
+    # ir_measures: col 1 is topic
+    # tot: col 2 is topic
+    col1_matches = topic_matches[1]
+    col2_matches = topic_matches[2]
+
+    if col1_matches > col2_matches and col1_matches > 0:
+        likely = "ir_measures"
+        confidence = "high" if col1_matches > len(known_topics) * 0.5 else "medium"
+        reason = f"Column 1 has most topic matches ({col1_matches}), suggesting ir_measures format. " + "; ".join(diag_parts)
+    elif col2_matches > col1_matches and col2_matches > 0:
+        likely = "tot"
+        confidence = "high" if col2_matches > len(known_topics) * 0.5 else "medium"
+        reason = f"Column 2 has most topic matches ({col2_matches}), suggesting tot format. " + "; ".join(diag_parts)
+    elif col1_matches == col2_matches and col1_matches > 0:
+        likely = "unknown"
+        confidence = "low"
+        reason = f"Columns 1 and 2 have equal topic matches ({col1_matches}), ambiguous. " + "; ".join(diag_parts)
+    else:
+        likely = "unknown"
+        confidence = "low"
+        reason = f"No topic matches found in expected columns. " + "; ".join(diag_parts)
+
+    return FormatGuess(
+        likely_format=likely,
+        confidence=confidence,
+        topic_col_matches=topic_matches,
+        numeric_cols=numeric_cols,
+        reason=reason,
+    )
+
+
 def format_error_with_hint(
     specified_format: str,
     expected_cols: int,
@@ -170,3 +316,50 @@ def format_error_with_hint(
         return base_msg + "\n\n" + "\n".join(suggestions)
 
     return base_msg
+
+
+def check_format_mismatch(
+    file_path: Path,
+    specified_format: str,
+    known_topics: Set[str],
+    has_header: bool = False,
+    sample_lines: int = 50,
+) -> Optional[str]:
+    """
+    Pre-hoc check for format mismatch before parsing.
+
+    Reads sample lines from file and guesses format based on topic matching.
+    Returns a warning message if the guessed format differs from specified format.
+
+    Args:
+        file_path: Path to the leaderboard file
+        specified_format: The format specified by user (e.g., "ir_measures", "tot")
+        known_topics: Set of expected topic IDs from truth/requests
+        has_header: Whether file has a header row
+        sample_lines: Number of lines to sample for detection
+
+    Returns:
+        Warning message string if mismatch detected, None otherwise
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = [f.readline() for _ in range(sample_lines)]
+            lines = [line for line in lines if line]  # Remove empty reads
+    except (OSError, UnicodeDecodeError) as e:
+        return f"Warning: Could not read {file_path.name}: {e}"
+
+    guess = guess_format_by_topics(lines, known_topics, has_header=has_header)
+
+    # Only warn if we have a confident guess that differs from specified
+    if guess.likely_format == "unknown":
+        return None
+
+    if guess.likely_format != specified_format:
+        return (
+            f"Warning: {file_path.name} appears to be '{guess.likely_format}' format "
+            f"but eval-format '{specified_format}' was specified.\n"
+            f"  Hint: {guess.reason}\n"
+            f"  Try: --eval-format {guess.likely_format}"
+        )
+
+    return None
