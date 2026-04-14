@@ -249,3 +249,59 @@ def write_nugget_banks_generic(
         write_nugget_banks_generic(banks, "output.jsonl")
     """
     _write_nugget_banks(banks, out, format)
+
+
+# =============================================================================
+# CLI for format conversion
+# =============================================================================
+
+BANK_TYPES = {
+    "argue": "autojudge_base.nugget_data.nugget_banks.NuggetBanks",
+    "nuggetizer": "autojudge_base.nugget_data.nuggetizer.nuggetizer_data.NuggetizerNuggetBanks",
+}
+
+
+def main():
+    """Convert nugget banks between JSONL and directory formats."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="""Convert nugget banks between JSONL and directory formats.
+
+        To convert a nuggets.jsonl file to a directory for AutoARGUE, use
+        $ python -m autojudge_base.nugget_data nuggets.jsonl output_dir/ --type argue
+
+        To convert AutoARGUE nuggets to nuggets.jsonl use
+        $ python -m autojudge_base.nugget_data input_dir/ output.jsonl --format jsonl
+        """
+    )
+    parser.add_argument("input", help="Input file (JSONL) or directory")
+    parser.add_argument("output", help="Output file (JSONL) or directory")
+    parser.add_argument(
+        "--type", "-t",
+        choices=list(BANK_TYPES.keys()),
+        default="argue",
+        help="Bank type (default: argue)"
+    )
+    parser.add_argument(
+        "--format", "-f",
+        choices=["jsonl", "directory"],
+        default="directory",
+        help="Output format (default: directory)"
+    )
+    args = parser.parse_args()
+
+    container_type = import_nugget_banks_type(BANK_TYPES[args.type])
+
+    input_path = Path(args.input)
+    if input_path.is_dir():
+        banks = load_nugget_banks_from_directory_generic(input_path, container_type)
+    else:
+        banks = load_nugget_banks_generic(input_path, container_type)
+
+    write_nugget_banks_generic(banks, args.output, format=args.format)
+    print(f"Wrote {len(banks.banks)} banks to {args.output}")
+
+
+if __name__ == "__main__":
+    main()
