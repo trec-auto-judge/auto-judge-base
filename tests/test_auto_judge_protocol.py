@@ -51,15 +51,13 @@ class TestAutoJudgeProtocoll(unittest.TestCase):
         runner = CliRunner()
 
         with TemporaryDirectory() as tmp_dir:
-            filebase = Path(tmp_dir) / "leaderboard"
-            result = runner.invoke(cmd, ["judge", "--rag-responses", str(TREC_25_DATA / "spot-check-dataset" / "runs"), "--leaderboard-format", "tot",  "--output", str(filebase)])
+            leaderboard_file = Path(tmp_dir) / "leaderboard.eval.txt"
+            result = runner.invoke(cmd, ["judge", "--rag-responses", str(TREC_25_DATA / "spot-check-dataset" / "runs"), "--leaderboard-format", "tot",  "--leaderboard-file", str(leaderboard_file)])
 
             print(result.output)
             print(result.exception)
             self.assertIsNone(result.exception)
             self.assertEqual(result.exit_code, 0)
-            # Output file gets .eval.txt suffix added by resolve_leaderboard_file_path()
-            leaderboard_file = filebase.parent / f"{filebase.name}.eval.txt"
             self.assertTrue(leaderboard_file.is_file())
             actual_leaderboard = leaderboard_file.read_text()
             self.assertIn("measure-01\t28\t1", actual_leaderboard)
