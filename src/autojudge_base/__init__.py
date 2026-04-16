@@ -19,6 +19,7 @@ from .request import Request, load_requests_from_irds, load_requests_from_file
 from .leaderboard import (
     Leaderboard,
     LeaderboardEntry,
+    LeaderboardFormat,
     MeasureSpec,
     LeaderboardSpec,
     LeaderboardBuilder,
@@ -175,6 +176,7 @@ __all__ = [
     # Output containers
     "Leaderboard",
     "LeaderboardEntry",
+    "LeaderboardFormat",
     "MeasureSpec",
     "LeaderboardSpec",
     "LeaderboardBuilder",
