@@ -24,6 +24,7 @@ class ReportMetaData(BaseModel):
     task:Optional[TaskType] = None
     description:Optional[str] = None
     creator:Dict[str,Any] = None
+    extra: Dict[str,Any] = None
 
             
     # dragun
@@ -106,6 +107,21 @@ class Rag24ReportSentence(BaseModel):
 
 ReportSentence: TypeAlias = RagtimeReportSentence | NeuclirReportSentence | Rag24ReportSentence
 
+
+class RankedDocument(BaseModel):
+    doc_id:str
+    rank:int
+    doc:Optional[Document]=None
+    score:Optional[float]=None
+
+class RetrievedDocuments(BaseModel):
+    query_id:str
+    test_collection:str
+    run_id:Optional[str]=None
+    metadata:Optional[Dict[str,Any]] = None
+    ranked_docs:List[RankedDocument] = list()
+
+
 class Report(BaseModel):
     is_ragtime:bool = True
     metadata:ReportMetaData
@@ -114,6 +130,7 @@ class Report(BaseModel):
     answer:Optional[List[NeuclirReportSentence]|List[RagtimeReportSentence]|List[Rag24ReportSentence]]=None
     path:Optional[Path]=Field(default=None, exclude=True)
     references:Optional[List[str]]=None  # index resolves to document id for `RAG25ReportSentence`
+    ranking:Optional[List[RetrievedDocuments]|List[RankedDocument]] = None
     documents:Optional[Dict[str,Document]] = None
     
     
