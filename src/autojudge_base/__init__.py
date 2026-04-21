@@ -71,6 +71,7 @@ class LeaderboardJudgeProtocol(Protocol):
         llm_config: LlmConfigProtocol,
         nugget_banks: Optional[NuggetBanksProtocol] = None,
         qrels: Optional[Qrels] = None,
+        corpus: Optional[str] = None,
         **kwargs
     ) -> "Leaderboard":
         """
@@ -82,6 +83,7 @@ class LeaderboardJudgeProtocol(Protocol):
             llm_config: LLM configuration
             nugget_banks: Optional nuggets for judgment
             qrels: Optional qrels from create_qrels() phase
+            corpus: Optional path to the document corpus (e.g. ir-datasets ID or directory)
             **kwargs: Additional settings
 
         Returns:
@@ -99,6 +101,7 @@ class QrelsCreatorProtocol(Protocol):
         rag_topics: Sequence["Request"],
         llm_config: LlmConfigProtocol,
         nugget_banks: Optional[NuggetBanksProtocol] = None,
+        corpus: Optional[str] = None,
         **kwargs
     ) -> Optional["Qrels"]:
         """
@@ -109,6 +112,7 @@ class QrelsCreatorProtocol(Protocol):
             rag_topics: Evaluation topics/queries
             llm_config: LLM configuration for qrels generation
             nugget_banks: Optional nuggets to use for judgment
+            corpus: Optional path to the document corpus (e.g. ir-datasets ID or directory)
             **kwargs: Additional settings (e.g., grade_range=[0, 3])
 
         Returns:
@@ -129,6 +133,7 @@ class NuggetCreatorProtocol(Protocol):
         rag_topics: Sequence["Request"],
         llm_config: LlmConfigProtocol,
         nugget_banks: Optional[NuggetBanksProtocol] = None,
+        corpus: Optional[str] = None,
         **kwargs
     ) -> Optional[NuggetBanksProtocol]:
         """
@@ -139,6 +144,7 @@ class NuggetCreatorProtocol(Protocol):
             rag_topics: Evaluation topics/queries
             llm_config: LLM configuration for nugget generation
             nugget_banks: Optional existing nuggets to refine/extend
+            corpus: Optional path to the document corpus (e.g. ir-datasets ID or directory)
 
         Returns:
             NuggetBanks container, or None if not supported
@@ -162,7 +168,7 @@ class AutoJudge(LeaderboardJudgeProtocol, QrelsCreatorProtocol, NuggetCreatorPro
 
 
 # CLI utilities
-from .click_plus import option_rag_responses, option_rag_topics, option_ir_dataset, auto_judge_to_click_command
+from .click_plus import option_rag_responses, option_rag_topics, option_ir_dataset, option_corpus, auto_judge_to_click_command
 
 __all__ = [
     # Version
@@ -209,6 +215,7 @@ __all__ = [
     "option_rag_responses",
     "option_rag_topics",
     "option_ir_dataset",
+    "option_corpus",
     "auto_judge_to_click_command",
     # Utilities
     "format_preview",

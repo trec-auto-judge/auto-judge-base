@@ -313,6 +313,20 @@ def option_nugget_banks():
     return decorator
 
 
+def option_corpus():
+    """Optional document corpus path or ir-datasets ID."""
+    def decorator(func):
+        func = click.option(
+            "--corpus",
+            type=str,
+            required=False,
+            default=None,
+            help="Optional document corpus (path to a directory or an ir-datasets ID). Forwarded to create_nuggets/create_qrels/judge."
+        )(func)
+        return func
+    return decorator
+
+
 def option_workflow():
     """Optional workflow.yml for declaring judge workflow."""
     def decorator(func):
@@ -480,6 +494,8 @@ def execute_run_workflow(
     nugget_creator=None,  # NuggetCreatorProtocol
     qrels_creator=None,   # QrelsCreatorProtocol
     leaderboard_judge=None,  # LeaderboardJudgeProtocol
+    # Optional document corpus (path or ir-datasets ID), forwarded to all three protocol calls
+    corpus: Optional[str] = None,
 ):
     """
     Core execution logic for running a judge workflow.
@@ -642,6 +658,8 @@ def execute_run_workflow(
             leaderboard_judge=leaderboard_judge,
             # Output format
             leaderboard_format=leaderboard_format,
+            # Document corpus (optional)
+            corpus=corpus,
         )
 
         click.echo(f"Done configuration: {config.name}", err=True)
@@ -707,6 +725,7 @@ def options_run(workflow_required: bool = False):
         func = option_submission()(func)
         func = option_llm_config()(func)
         func = option_nugget_banks()(func)
+        func = option_corpus()(func)
         func = option_rag_topics()(func)
         func = option_rag_responses()(func)
         func = click.option(

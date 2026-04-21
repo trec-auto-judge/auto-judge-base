@@ -81,6 +81,8 @@ def run_judge(
     leaderboard_judge=None,  # LeaderboardJudgeProtocol
     # Output format
     leaderboard_format: Optional[str] = None,
+    # Optional document corpus (path or ir-datasets ID), forwarded to all three protocol calls
+    corpus: Optional[str] = None,
 ) -> JudgeResult:
     """
     Execute judge workflow with nugget lifecycle management.
@@ -227,6 +229,7 @@ def run_judge(
                 rag_topics=rag_topics,
                 llm_config=llm_config,
                 nugget_banks=input_nuggets,
+                corpus=corpus,
                 **nugget_kwargs,
             )
             # Verify created nuggets
@@ -268,6 +271,7 @@ def run_judge(
                 rag_topics=rag_topics,
                 llm_config=llm_config,
                 nugget_banks=nuggets_for_qrels,
+                corpus=corpus,
                 **qrels_kwargs,
             )
 
@@ -304,6 +308,7 @@ def run_judge(
             llm_config=llm_config,
             nugget_banks=nuggets_for_judge,
             qrels=qrels_for_judge,
+            corpus=corpus,
             **judge_kwargs,
         )
 
