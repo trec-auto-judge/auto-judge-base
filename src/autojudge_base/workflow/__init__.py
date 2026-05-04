@@ -19,6 +19,7 @@ from .workflow import (
 )
 
 from .paths import (
+    resolve_any_file_path,
     resolve_nugget_file_path,
     resolve_leaderboard_file_path,
     resolve_qrels_file_path,

@@ -629,6 +629,7 @@ def execute_run_workflow(
             nugget_banks_path=nugget_banks,
             judge_output_path=judge_output_path,
             nugget_output_path=nugget_output_path,
+            out_dir=out_dir,
             do_create_nuggets=effective_create_nuggets,
             do_create_qrels=effective_create_qrels,
             do_judge=effective_do_judge,

@@ -11,6 +11,14 @@ Provides consistent file naming conventions:
 from pathlib import Path
 
 
+
+def resolve_any_file_path(filebase: Path, pattern:str, suffix:str) -> Path:
+    if filebase.suffix == suffix:
+        return filebase
+    return filebase.parent / f"{filebase.name}.{pattern}.{suffix}"
+
+
+
 def resolve_nugget_file_path(filebase: Path) -> Path:
     """
     Resolve nugget file path from filebase.

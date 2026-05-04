@@ -28,6 +28,7 @@ from .workflow.paths import (
     resolve_leaderboard_file_path,
     resolve_config_file_path,
     resolve_responses_file_path,
+    resolve_any_file_path,
     load_nugget_banks_from_path,
     load_qrels_from_path,
 )
@@ -41,6 +42,29 @@ class JudgeResult:
     nuggets: Optional[NuggetBanksProtocol]  # Final nuggets (created or loaded)
 
 
+def _resolve_kwargs(
+    kwargs: dict,
+    config_name: str,
+    out_dir: Optional[Path],
+) -> dict:
+    """
+    Resolve template variables in kwargs and inject special variables.
+
+    - Resolves {_name} in 'filebase' setting
+    - Injects 'outdir' (output directory, defaults to ".")
+    """
+    result = dict(kwargs)
+
+    # Resolve {_name} in filebase
+    if "filebase" in result and isinstance(result["filebase"], str):
+        result["filebase"] = result["filebase"].replace("{_name}", config_name)
+
+    # Inject outdir (default to current directory if not specified)
+    result["outdir"] = Path(out_dir) if out_dir else Path(".")
+
+    return result
+
+
 def run_judge(
     auto_judge=None,
     rag_responses: Iterable[Report] = None,
@@ -49,6 +73,7 @@ def run_judge(
     nugget_banks_path: Optional[Path] = None,
     judge_output_path: Optional[Path] = None,
     nugget_output_path: Optional[Path] = None,
+    out_dir: Optional[Path] = None,
     do_create_nuggets: bool = False,
     do_create_qrels: bool = False,
     do_judge: bool = True,
@@ -215,7 +240,11 @@ def run_judge(
             current_nuggets = load_nugget_banks_from_path(nugget_file_path, nugget_banks_type)
         else:
             # Create nuggets
-            nugget_kwargs = nugget_settings or settings or {}
+            nugget_kwargs = _resolve_kwargs(
+                nugget_settings or settings or {},
+                config_name,
+                out_dir,
+            )
             if nugget_kwargs:
                 print(f"[judge_runner] create_nuggets settings: {nugget_kwargs}", file=sys.stderr)
 
@@ -257,7 +286,11 @@ def run_judge(
             current_qrels = load_qrels_from_path(qrels_file_path)
         else:
             # Create qrels
-            qrels_kwargs = qrels_settings or settings or {}
+            qrels_kwargs = _resolve_kwargs(
+                qrels_settings or settings or {},
+                config_name,
+                out_dir,
+            )
             if qrels_kwargs:
                 print(f"[judge_runner] create_qrels settings: {qrels_kwargs}", file=sys.stderr)
 
@@ -286,9 +319,13 @@ def run_judge(
 
     # Step 3: Judge leaderboard if requested
     if do_judge:
-        judge_kwargs = dict(judge_settings or settings or {})
+        judge_kwargs = _resolve_kwargs(
+            judge_settings or settings or {},
+            config_name,
+            out_dir,
+        )
 
-        # Inject resolved filebase from judge_output_path (replaces template like {_name})
+        # Also inject resolved filebase from judge_output_path for backward compatibility
         if judge_output_path:
             judge_kwargs["filebase"] = str(judge_output_path)
 
