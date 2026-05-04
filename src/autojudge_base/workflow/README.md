@@ -99,6 +99,40 @@ User-defined parameters are also available: `{top_k}` expands to the value of `t
 |---------|-------------|
 | `llm_model` | Override `llm_config.model` for this run |
 
+### Standard Output Path Parameters
+
+The framework injects two parameters into all judge method calls:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `outdir` | `Path` | Output directory for intermediate files (from `--out-dir`) |
+| `filebase` | `str` | Base filename with `{_name}` resolved to current variant/sweep name |
+
+Include these in your method signatures:
+
+```python
+from pathlib import Path
+
+def judge(
+    self,
+    rag_responses, rag_topics, llm_config,
+    nugget_banks=None, qrels=None,
+    # Standard output path settings (auto-filled by judge_runner)
+    filebase: str = "default",
+    outdir: Path = Path("."),
+    **kwargs
+) -> Leaderboard:
+```
+
+Use them to build paths for intermediate output files:
+
+```python
+from autojudge_base.workflow.paths import resolve_any_file_path
+
+# Writes to: outdir/myjudge.waffle.jsonl
+waffle_path = resolve_any_file_path(outdir / filebase, "waffle", "jsonl")
+```
+
 ### Variants
 
 Named configurations that override base settings:
