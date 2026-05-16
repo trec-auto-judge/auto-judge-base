@@ -22,7 +22,6 @@ jobs:
       - name: Install dependencies
         run: |
           pip install ".[test]"
-          pip install tira trectools
       - name: Run tests
         run: |
           python -m pytest --cov-report term --cov=autojudge_base tests
