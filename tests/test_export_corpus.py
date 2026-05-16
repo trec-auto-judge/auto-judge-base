@@ -29,6 +29,9 @@ class TestExportCorpora(unittest.TestCase):
             runner = CliRunner()
             result = runner.invoke(main, ["export-corpus", str(target_dir)])
 
+            print(result.output)
+            print(result.exception)
+
             self.assertTrue(target_path.is_file())            
             self.assertIsNone(result.exception)
             self.assertEqual(result.exit_code, 0)
