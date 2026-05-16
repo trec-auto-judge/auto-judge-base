@@ -79,7 +79,7 @@ auto-judge run --workflow workflow.yml --rag-responses responses.jsonl
 # Export corpus
 auto-judge export-corpus --output corpus.tar.gz
 
-# Describe a leaderboard based on its sibling config
+# Describe a leaderboard
 auto-judge describe tests/resources/example-leaderboard-ir-axioms/ir_axioms.eval.txt
 
 # List available models
