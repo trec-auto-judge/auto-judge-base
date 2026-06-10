@@ -243,20 +243,60 @@ def mean_of_floats(values: Sequence[Any]) -> float:
     return mean(float(v) for v in values)
 
 
+def first_value(values: Sequence[Any]) -> Any:
+    """Aggregate by taking the first value (for non-numeric types)."""
+    return values[0] if values else ""
+
+
+# Allowed dtypes for MeasureSpec
+MeasureDtype = type  # float, int, or str
+
+
 @dataclass(frozen=True)
 class MeasureSpec:
     """
     Build-time definition of a measure.
 
-    - `name`: key used in entry.values and output.
-    - `aggregate`: computes the synthetic per-run value from per-topic values.
-    - `cast`: normalizes/validates per-topic values when rows are added.
-    - `default`: value used for missing (run_id, topic_id) pairs when build() fills gaps.
+    Args:
+        name: Key used in entry.values and output.
+        dtype: The data type for this measure. Determines cast, aggregate, and default:
+            - float (default): cast to float, aggregate with mean, default 0.0
+            - int: cast to int, aggregate with mean (returns float), default 0
+            - str: cast to str, aggregate with first_value, default ""
+
+    Per-topic values are cast to dtype. Aggregate ("all" row) is always float
+    for numeric types (mean), preserving backwards compatibility.
+
+    Examples:
+        MeasureSpec("SCORE")              # float, mean aggregation
+        MeasureSpec("COUNT", int)         # int per-topic, float aggregate
+        MeasureSpec("CATEGORY", str)      # str, first_value aggregation
     """
     name: MeasureName
-    aggregate: AggFn = mean_of_floats
-    cast: CastFn = float
-    default: Any = 0.0
+    dtype: MeasureDtype = float
+
+    def __post_init__(self):
+        if self.dtype not in (float, int, str):
+            raise ValueError(
+                f"MeasureSpec dtype must be float, int, or str, got {self.dtype!r}"
+            )
+
+    @property
+    def cast(self) -> CastFn:
+        """Return cast function based on dtype."""
+        return self.dtype
+
+    @property
+    def aggregate(self) -> AggFn:
+        """Return aggregate function based on dtype."""
+        if self.dtype in (float, int):
+            return mean_of_floats
+        return first_value
+
+    @property
+    def default(self) -> Any:
+        """Return default value based on dtype."""
+        return self.dtype()  # float()->0.0, int()->0, str()->""
 
 
 @dataclass(frozen=True)

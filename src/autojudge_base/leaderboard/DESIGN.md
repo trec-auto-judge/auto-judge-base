@@ -97,23 +97,29 @@ class LeaderboardBuilder:
 @dataclass(frozen=True)
 class MeasureSpec:
     name: MeasureName
-    dtype: type = float  # Only float or str allowed
+    dtype: type = float  # float, int, or str
 
-    def get_cast(self) -> CastFn: ...
-    def get_aggregate(self) -> AggFn: ...
-    def get_default(self) -> Any: ...
+    @property
+    def cast(self) -> CastFn: ...
+    @property
+    def aggregate(self) -> AggFn: ...
+    @property
+    def default(self) -> Any: ...
 ```
 
 **dtype → behavior mapping:**
 
 | dtype | cast | aggregate | default |
 |-------|------|-----------|---------|
-| `float` | `float(x)` | mean | 0.0 |
+| `float` | `float(x)` | mean → float | 0.0 |
+| `int` | `int(x)` | mean → float | 0 |
 | `str` | `str(x)` | first_value | "" |
 
-**Only `float` and `str` are allowed.** This ensures dtype survives save/load round-trips:
-- Numeric values → `float`
+**Only `float`, `int`, and `str` are allowed.** This ensures dtype survives save/load round-trips:
+- Numeric values → `float` or `int`
 - Non-numeric values → `str`
+
+**Note:** For numeric types (`float` and `int`), the aggregate is always `mean` returning a `float`. This ensures backwards compatibility - per-topic values can be int, but the "all" row aggregate is float.
 
 If you have boolean data, store it as `1.0`/`0.0` with `dtype=float`. The aggregation (mean) gives you the fraction of `True` values, which is typically what you want.
 
@@ -144,6 +150,7 @@ When implementing a judge, the developer explicitly defines the spec:
 MY_SPEC = LeaderboardSpec(measures=(
     MeasureSpec("GRADE"),              # dtype=float (default)
     MeasureSpec("IS_MATCH"),           # dtype=float - use 1.0/0.0 for boolean
+    MeasureSpec("COUNT", int),         # dtype=int - per-topic int, aggregate float
     MeasureSpec("CATEGORY", str),      # dtype=str
 ))
 
@@ -173,7 +180,9 @@ def _infer_dtype_from_values(values: Sequence[Any]) -> type:
 - If all values parse as numbers → `float`
 - Otherwise → `str`
 
-**`bool` and `int` are not allowed as dtypes** because they can't survive save/load round-trips. Use `float` with `1.0`/`0.0` for boolean data, and `float` for integer counts (no precision loss for typical values).
+**`bool` is not allowed as a dtype** because it can't survive save/load round-trips. Use `float` with `1.0`/`0.0` for boolean data. The aggregation (mean) gives you the fraction of `True` values.
+
+**`int` is allowed** for per-topic values. Aggregates are computed as float (mean) for backwards compatibility.
 
 After loading, the spec is explicit and routed through all subsequent operations.
 

@@ -40,6 +40,7 @@ class Workflow(BaseModel):
         judge: true
 
         settings:
+          description: "Extraction judge that will check wether the top_k is above a threshold."
           filebase: "{_name}"
           top_k: 20
 
@@ -51,6 +52,7 @@ class Workflow(BaseModel):
 
         variants:
           strict:
+            description: "Extraction judge that will check whether the top_k is above a higher 0.8 threshold"
             threshold: 0.8
 
         sweeps:
