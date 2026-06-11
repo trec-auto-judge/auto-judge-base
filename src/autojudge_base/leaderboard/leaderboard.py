@@ -35,12 +35,14 @@ class Leaderboard:
     Thin serialization vessel for leaderboard results.
 
     - `measures` defines the measure names.
+    - `spec` contains full MeasureSpecs with dtype and description.
     - `entries` contains per-topic rows and and per-measure `all_topic_id` rows.
-    
+
     Developer note:
     - Aggregation logic lives in LeaderboardBuilder.
     """
     measures: Tuple[MeasureName, ...]
+    spec: "LeaderboardSpec"
     entries: Tuple[LeaderboardEntry, ...]
     all_topic_id: str = "all"
     
@@ -147,8 +149,12 @@ class Leaderboard:
             for (run_id, topic_id), values in all_entry_values.items()
         ]
 
+        # Create minimal spec from measure names (no descriptions when loading)
+        spec = LeaderboardSpec(measures=tuple(MeasureSpec(name) for name in measure_names))
+
         return cls(
             measures=tuple(measure_names),
+            spec=spec,
             entries=tuple(entries),
         )
 
@@ -227,8 +233,12 @@ class Leaderboard:
             for (run_id, topic_id), values in entry_values.items()
         ]
 
+        # Create minimal spec from measure names (no descriptions when loading)
+        spec = LeaderboardSpec(measures=tuple(MeasureSpec(name) for name in measure_names))
+
         return cls(
             measures=tuple(measure_names),
+            spec=spec,
             entries=tuple(entries),
         )
 
@@ -263,6 +273,8 @@ class MeasureSpec:
             - float (default): cast to float, aggregate with mean, default 0.0
             - int: cast to int, aggregate with mean (returns float), default 0
             - str: cast to str, aggregate with first_value, default ""
+        description: Human-readable description of what this measure represents.
+            Exported to measures.yml for documentation.
 
     Per-topic values are cast to dtype. Aggregate ("all" row) is always float
     for numeric types (mean), preserving backwards compatibility.
@@ -271,9 +283,11 @@ class MeasureSpec:
         MeasureSpec("SCORE")              # float, mean aggregation
         MeasureSpec("COUNT", int)         # int per-topic, float aggregate
         MeasureSpec("CATEGORY", str)      # str, first_value aggregation
+        MeasureSpec("RELEVANCE", description="How relevant the response is to the query")
     """
     name: MeasureName
     dtype: MeasureDtype = float
+    description: str = ""
 
     def __post_init__(self):
         if self.dtype not in (float, int, str):
@@ -304,7 +318,7 @@ class LeaderboardSpec:
     """
     Build-time schema for a leaderboard.
 
-    The spec defines all valid measure names with aggregator and caster. 
+    The spec defines all valid measure names with aggregator and caster.
     Storing values for different names will raise an error.
     """
     measures: Tuple[MeasureSpec, ...]
@@ -327,6 +341,38 @@ class LeaderboardSpec:
         Assumes `values` contains all required measure keys.
         """
         return {m.name: m.cast(values[m.name]) for m in self.measures}
+
+    def to_measures_dict(self) -> List[Dict[str, Any]]:
+        """
+        Export measure specs as a list of dicts for YAML serialization.
+
+        Returns:
+            List of dicts with keys: name, dtype, description (if non-empty)
+        """
+        result = []
+        for m in self.measures:
+            entry: Dict[str, Any] = {
+                "name": m.name,
+                "dtype": m.dtype.__name__,  # "float", "int", or "str"
+            }
+            if m.description:
+                entry["description"] = m.description
+            result.append(entry)
+        return result
+
+    def write_measures_yaml(self, output: Path) -> None:
+        """
+        Write measure specs to a YAML file.
+
+        Args:
+            output: Path to write measures.yml
+        """
+        import yaml
+
+        data = {"measures": self.to_measures_dict()}
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with open(output, "w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
 
 
 #  ==== Convenient Builder for Leaderboards ===
@@ -524,6 +570,7 @@ class LeaderboardBuilder:
 
         return Leaderboard(
             measures=self.spec.names,
+            spec=self.spec,
             entries=tuple(all_entries + all_rows),
             all_topic_id=self.spec.all_topic_id,
         )

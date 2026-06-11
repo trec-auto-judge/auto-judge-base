@@ -389,6 +389,11 @@ def _write_leaderboard(
     leaderboard.write(leaderboard_path, format=format_to_use)
     print(f"[judge_runner] Leaderboard saved to: {leaderboard_path} (format={format_to_use})", file=sys.stderr)
 
+    # Write measures.yml with dtype and descriptions
+    measures_path = leaderboard_path.with_suffix(".measures.yml")
+    leaderboard.spec.write_measures_yaml(measures_path)
+    print(f"[judge_runner] Measures spec saved to: {measures_path}", file=sys.stderr)
+
 
 def _write_run_config(
     judge_output_path: Path,

@@ -198,11 +198,11 @@ Use `LeaderboardBuilder` with a `LeaderboardSpec` to create type-safe leaderboar
 ```python
 from autojudge_base import LeaderboardBuilder, LeaderboardSpec, MeasureSpec
 
-# Define your measures
+# Define your measures (with optional dtype and description)
 spec = LeaderboardSpec(measures=(
-    MeasureSpec("RELEVANCE"),           # Default: mean aggregation, float values
-    MeasureSpec("FLUENCY"),
-    MeasureSpec("CITATION_QUALITY", aggregate=sum),  # Custom aggregation
+    MeasureSpec("RELEVANCE", description="How relevant the response is to the query"),
+    MeasureSpec("FLUENCY", description="Grammatical correctness and readability"),
+    MeasureSpec("COUNT", int, description="Number of cited documents"),  # int dtype
 ))
 
 # Build the leaderboard
@@ -215,7 +215,7 @@ for report in reports:
         values={
             "RELEVANCE": 0.85,
             "FLUENCY": 0.92,
-            "CITATION_QUALITY": 3,
+            "COUNT": 3,  # int value, cast to int
         }
     )
 

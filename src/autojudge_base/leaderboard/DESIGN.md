@@ -91,13 +91,14 @@ class LeaderboardBuilder:
 
 ### MeasureSpec (Measure Schema)
 
-**Responsibility:** Define a single measure's name and processing behavior.
+**Responsibility:** Define a single measure's name, type, and description.
 
 ```python
 @dataclass(frozen=True)
 class MeasureSpec:
     name: MeasureName
     dtype: type = float  # float, int, or str
+    description: str = ""  # Human-readable description (exported to measures.yml)
 
     @property
     def cast(self) -> CastFn: ...
@@ -120,6 +121,8 @@ class MeasureSpec:
 - Non-numeric values → `str`
 
 **Note:** For numeric types (`float` and `int`), the aggregate is always `mean` returning a `float`. This ensures backwards compatibility - per-topic values can be int, but the "all" row aggregate is float.
+
+**description** is exported to `{filebase}.measures.yml` by judge_runner, documenting the measure semantics.
 
 If you have boolean data, store it as `1.0`/`0.0` with `dtype=float`. The aggregation (mean) gives you the fraction of `True` values, which is typically what you want.
 
