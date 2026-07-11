@@ -126,10 +126,10 @@ Use the CLI to check available models and test resolution:
 
 ```bash
 # List available models
-trec-auto-judge list-models
+auto-judge list-models
 
 # Test resolution against your config
-trec-auto-judge list-models --resolve llm-config.yml
+auto-judge list-models --resolve llm-config.yml
 ```
 
 ## Troubleshooting

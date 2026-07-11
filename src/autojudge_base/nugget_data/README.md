@@ -4,7 +4,7 @@
 
 ```python
 
-from trec_auto_judge.nugget_data import (
+from autojudge_base.nugget_data import (
     NuggetBank, NuggetQuestion, NuggetClaim,
     Answer, Reference, Offsets, AggregatorType, Creator
 )
@@ -114,7 +114,7 @@ bank.add_nuggets(nugget)
 
 
 # Optional: print as JSON
-from trec_auto_judge.nugget_data import print_nugget_json
+from autojudge_base.nugget_data import print_nugget_json
 print_nugget_json(nugget_bank)
 
 
@@ -155,7 +155,7 @@ Parameters:
 For more granular control or test cases, use the fluent `NuggetBanksVerification` class:
 
 ```python
-from trec_auto_judge.nugget_data import NuggetBanksVerification
+from autojudge_base.nugget_data import NuggetBanksVerification
 
 # Chain specific checks
 NuggetBanksVerification(
