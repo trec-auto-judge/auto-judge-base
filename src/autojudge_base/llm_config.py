@@ -59,9 +59,13 @@ class LlmConfigBase:
     @classmethod
     def from_env(cls) -> "LlmConfigBase":
         """Load from environment variables."""
+        # Note: Path("") is Path(".") and truthy, so the empty-string fallback
+        # must be resolved BEFORE constructing the Path — otherwise an unset
+        # CACHE_DIR silently enables caching in the current directory.
+        cache = os.getenv("CACHE_DIR") or os.getenv("LLM_CACHE_DIR")
         return cls(
             model=os.getenv("OPENAI_MODEL", os.getenv("LLM_MODEL", "gpt-4o-mini")),
-            cache_dir=Path(os.getenv("CACHE_DIR", os.getenv("LLM_CACHE_DIR", ""))) or None,
+            cache_dir=Path(cache) if cache else None,
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL"),
             raw={},
