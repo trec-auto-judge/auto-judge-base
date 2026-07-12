@@ -67,7 +67,9 @@ class LlmConfigBase:
             model=os.getenv("OPENAI_MODEL", os.getenv("LLM_MODEL", "gpt-4o-mini")),
             cache_dir=Path(cache) if cache else None,
             api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
+            # OPENAI_API_BASE is the litellm-convention name for the same thing;
+            # accept both so judges work under either injection convention.
+            base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE"),
             raw={},
         )
 
