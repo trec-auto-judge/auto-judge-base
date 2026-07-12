@@ -64,7 +64,7 @@ For modular composition (separate classes per protocol), see `CompleteExampleJud
 ### Configuration
 
 - `LlmConfigProtocol`, `LlmConfigBase` - LLM configuration
-- `load_llm_config()` - Load config from env/yaml/cli
+- `LlmConfigBase.from_env()` - LLM configuration from environment variables (the only injection path)
 
 See the [auto-judge-starterkit](https://github.com/trec-auto-judge/auto-judge-starterkit) README for LLM configuration examples.
 

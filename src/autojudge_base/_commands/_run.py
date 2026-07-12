@@ -25,8 +25,7 @@ def run_workflow(**kwargs):
         trec-auto-judge run --workflow ./judges/myjudge/workflow.yml \\
             --rag-responses ./responses/ \\
             --rag-topics ./topics.jsonl \\
-            --out-dir ./output/ \\
-            --llm-config ./llm-config.yml
+            --out-dir ./output/
 
         trec-auto-judge run -w workflow.yml --variant strict ...
 

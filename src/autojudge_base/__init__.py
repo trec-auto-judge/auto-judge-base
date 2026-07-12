@@ -42,7 +42,7 @@ from .nugget_data import NuggetBanks, NuggetBanksProtocol
 from .nugget_doc_models import NuggetDocEntry, TopicNuggetDocs, write_nugget_docs_collaborator
 
 # LLM configuration
-from .llm_config import LlmConfigProtocol, LlmConfigBase, load_llm_config
+from .llm_config import LlmConfigProtocol, LlmConfigBase
 
 # Utilities
 from .utils import format_preview
@@ -205,7 +205,6 @@ __all__ = [
     # LLM configuration
     "LlmConfigProtocol",
     "LlmConfigBase",
-    "load_llm_config",
     # Protocols
     "LeaderboardJudgeProtocol",
     "QrelsCreatorProtocol",

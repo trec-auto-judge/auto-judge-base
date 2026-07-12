@@ -122,3 +122,15 @@ judge_settings:
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_llm_config_flag_is_removed(tmp_path):
+    """LLM config comes exclusively from environment variables: the historical
+    --llm-config / --submission flags must no longer exist."""
+    from click.testing import CliRunner
+    from autojudge_base._commands._run import run_workflow
+
+    runner = CliRunner()
+    for flag in (["--llm-config", "x.yml"], ["--submission"]):
+        result = runner.invoke(run_workflow, flag)
+        assert result.exit_code != 0
+        assert "No such option" in result.output

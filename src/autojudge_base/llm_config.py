@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 import os
-import yaml
 
 
 @runtime_checkable
@@ -24,16 +23,6 @@ class LlmConfigProtocol(Protocol):
     @classmethod
     def from_env(cls) -> "LlmConfigProtocol":
         """Load configuration from environment variables."""
-        ...
-
-    @classmethod
-    def from_yaml(cls, path: Path) -> "LlmConfigProtocol":
-        """Load configuration from a YAML file."""
-        ...
-
-    @classmethod
-    def from_dict(cls, data: dict, default: "LlmConfigProtocol") -> "LlmConfigProtocol":
-        """Overlay dict values onto a default config."""
         ...
 
 
@@ -73,55 +62,8 @@ class LlmConfigBase:
             raw={},
         )
 
-    @classmethod
-    def from_dict(cls, data: dict, default: "LlmConfigBase") -> "LlmConfigBase":
-        """Overlay dict values onto a default config, preserving full raw dict."""
-        from dataclasses import replace
-        kwargs = {"raw": data}  # Always store full dict
-        if "model" in data:
-            kwargs["model"] = data["model"]
-        if "cache_dir" in data:
-            kwargs["cache_dir"] = Path(data["cache_dir"]) if data["cache_dir"] else None
-        if "api_key" in data:
-            kwargs["api_key"] = data["api_key"]
-        if "base_url" in data:
-            kwargs["base_url"] = data["base_url"]
-        return replace(default, **kwargs)
-
-    @classmethod
-    def from_yaml(cls, path: Path) -> "LlmConfigBase":
-        """Load from YAML file, using env as base."""
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
-        return cls.from_dict(data, default=cls.from_env())
-
-    @classmethod
-    def from_cli(cls, default: "LlmConfigBase", **cli_args) -> "LlmConfigBase":
-        """Overlay individual CLI flags onto a config."""
-        data = {k: v for k, v in cli_args.items() if v is not None}
-        # Merge CLI overrides into raw dict
-        merged_raw = {**default.raw, **data}
-        result = cls.from_dict(data, default=default)
-        return replace(result, raw=merged_raw)
 
 
-def load_llm_config(
-    yaml_path: Optional[Path] = None,
-    **cli_overrides
-) -> LlmConfigBase:
-    """
-    Load LLM config with standard layering: env -> yaml -> cli.
 
-    Args:
-        yaml_path: Optional path to YAML config file
-        **cli_overrides: CLI flag overrides (model, cache_dir, etc.)
 
-    Returns:
-        Configured LlmConfigBase instance
-    """
-    if yaml_path:
-        config = LlmConfigBase.from_yaml(yaml_path)
-    else:
-        config = LlmConfigBase.from_env()
 
-    return LlmConfigBase.from_cli(config, **cli_overrides)

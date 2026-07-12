@@ -311,7 +311,6 @@ auto-judge nuggify  # Create nuggets only (--store-nuggets required)
 - `--rag-responses PATH` — responses file or directory
 - `--rag-topics PATH` — topics JSONL file
 - `--nugget-banks PATH` — input nugget banks (file or directory)
-- `--llm-config PATH` — LLM configuration YAML
 
 **Output:**
 - `--out-dir PATH` — parent directory for all output files

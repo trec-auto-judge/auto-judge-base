@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 from .io import load_runs_failsave
 from .request import load_requests_from_irds, load_requests_from_file
 from .llm_config import LlmConfigBase
-from .llm_resolver import ModelPreferences, ModelResolver, ModelResolutionError
 from .workflow import (
     load_workflow,
     resolve_default,
@@ -252,34 +251,6 @@ def option_rag_topics():
     return decorator
 
 
-def option_llm_config():
-    """Optional llm-config.yml for model preferences."""
-    def decorator(func):
-        func = click.option(
-            "--llm-config",
-            type=ExpandedPath(exists=True, path_type=Path),
-            required=False,
-            default=None,
-            help="Path to llm-config.yml (dev: base_url+model, submission: model_preferences). "
-                 "Tip: CACHE_FORCE_REFRESH=1 bypasses prompt cache."
-        )(func)
-        return func
-    return decorator
-
-
-def option_submission():
-    """Flag to enable submission mode (resolve model_preferences)."""
-    def decorator(func):
-        func = click.option(
-            "--submission",
-            is_flag=True,
-            default=False,
-            help="Submission mode: resolve model_preferences against organizer's available models"
-        )(func)
-        return func
-    return decorator
-
-
 class ClickNuggetBanksPath(click.ParamType):
     """Click parameter type for nugget banks path (file or directory)."""
     name = "file-or-dir"
@@ -341,127 +312,12 @@ def option_workflow():
     return decorator
 
 
-def _resolve_llm_config(
-    llm_config_path: Optional[Path],
-    submission: bool = False,
-) -> LlmConfigBase:
-    """
-    Resolve LLM config from llm-config.yml or environment.
-
-    Two modes:
-    - Dev mode (default): Load direct config (base_url + model) from file or env.
-      For judge developers testing with their local LLM.
-    - Submission mode (--submission): Resolve model_preferences against available
-      models provided by the organizer.
-
-    Note: force_refresh is read from llm-config.yml or CACHE_FORCE_REFRESH env var.
-
-    Args:
-        llm_config_path: Path to llm-config.yml
-        submission: If True, use submission mode (resolve model_preferences)
-    """
-    if submission:
-        # Submission mode: resolve model_preferences against organizer's available models
-        if llm_config_path is None:
-            raise click.ClickException(
-                "Submission mode requires --llm-config with model_preferences"
-            )
-        try:
-            prefs = ModelPreferences.from_yaml(llm_config_path)
-            resolver = ModelResolver.from_env()
-            config = resolver.resolve(prefs)
-            click.echo(f"Submission mode - resolved model: {config.model} from {config.base_url}", err=True)
-            return config
-        except ModelResolutionError as e:
-            raise click.ClickException(str(e))
-        except Exception as e:
-            raise click.ClickException(f"Could not resolve model preferences from {llm_config_path}: {e}")
-
-    # Dev mode: load config from YAML (with env as base)
-    if llm_config_path is not None:
-        try:
-            config = LlmConfigBase.from_yaml(llm_config_path)
-            click.echo(f"Dev mode - loaded config: {config.model} from {config.base_url}", err=True)
-            return config
-        except FileNotFoundError:
-            click.echo(f"Warning: Config file not found: {llm_config_path}", err=True)
-        # Note: from_yaml calls from_env() which raises RuntimeError if env vars missing
-        # We let that propagate since it's a user error that needs fixing
-
-    # Fallback to environment-based config
-    return LlmConfigBase.from_env()
-
-
-def _apply_llm_model_override(
-    llm_config: LlmConfigBase,
-    settings: dict,
-    submission: bool,
-) -> tuple[LlmConfigBase, dict]:
-    """
-    Apply llm_model from settings to llm_config and strip it from settings.
-
-    Steps:
-    1. Extract llm_model from settings
-    2. Apply it to llm_config
-    3. In submission mode, validate the model is allowed by organizer
-    4. Strip llm_model from settings before passing to AutoJudge
-
-    Args:
-        llm_config: Base LLM configuration
-        settings: Settings dict (may contain 'llm_model')
-        submission: Whether we're in submission mode
-
-    Returns:
-        Tuple of (updated_llm_config, settings_without_llm_model)
-    """
-    from dataclasses import replace
-
-    llm_model = settings.get("llm_model")
-    stripped_settings = {k: v for k, v in settings.items() if k != "llm_model"}
-
-    if not llm_model:
-        return llm_config, stripped_settings
-
-    # In submission mode, validate the model is allowed
-    if submission:
-        try:
-            resolver = ModelResolver.from_env()
-            available = resolver.available
-            enabled_models = available.get_enabled_models()
-
-            # Check if model is available (directly or via alias)
-            canonical = available.resolve_alias(llm_model)
-            if canonical not in available.models:
-                click.echo(
-                    f"Warning: llm_model '{llm_model}' is not available in submission mode. "
-                    f"Available models: {enabled_models}. Ignoring llm_model setting.",
-                    err=True,
-                )
-                return llm_config, stripped_settings
-
-        except Exception as e:
-            click.echo(
-                f"Warning: Could not validate llm_model against available models: {e}. "
-                f"Ignoring llm_model setting.",
-                err=True,
-            )
-            return llm_config, stripped_settings
-
-    # Apply the model override (update both model and raw dict)
-    updated_raw = {**llm_config.raw, "model": llm_model}
-    updated_config = replace(llm_config, model=llm_model, raw=updated_raw)
-    click.echo(f"Model override from settings: {llm_model}", err=True)
-    return updated_config, stripped_settings
-
-
 def execute_run_workflow(
     auto_judge=None,
     workflow: Optional[Path] = None,
     rag_responses=None,
     rag_topics=None,
     nugget_banks=None,
-    llm_config: Optional[Path] = None,
-    submission: bool = False,
     out_dir: Optional[Path] = None,
     filebase: Optional[str] = None,
     store_nuggets: Optional[Path] = None,
@@ -567,8 +423,8 @@ def execute_run_workflow(
     except KeyError as e:
         raise click.UsageError(str(e).strip("'\""))
 
-    # Load base LLM config from file/env
-    base_llm_config = _resolve_llm_config(llm_config, submission)
+    # LLM config comes exclusively from environment variables
+    base_llm_config = LlmConfigBase.from_env()
 
     # Convert rag_topics to list once (it's an iterable)
     topics_list = list(rag_topics)
@@ -577,10 +433,7 @@ def execute_run_workflow(
     for config in configs:
         click.echo(f"\n=== Running configuration: {config.name} ===", err=True)
 
-        # Apply llm_model from settings, validate in submission mode, strip from settings
-        effective_llm_config, clean_settings = _apply_llm_model_override(
-            base_llm_config, config.settings, submission
-        )
+        effective_llm_config, clean_settings = base_llm_config, config.settings
 
         # Determine output paths: --store-nuggets overrides, otherwise use resolved config
         nugget_output_path = store_nuggets or config.nugget_output_path
@@ -723,8 +576,6 @@ def options_run(workflow_required: bool = False):
         func = click.option("--store-nuggets", type=ExpandedPath(path_type=Path), help="Override nugget output path.", required=False)(func)
         func = click.option("--filebase", type=str, help="Override workflow filebase (e.g., 'my-run').", required=False)(func)
         func = click.option("--out-dir", type=ExpandedPath(path_type=Path), help="Parent directory for all output files.", required=False)(func)
-        func = option_submission()(func)
-        func = option_llm_config()(func)
         func = option_nugget_banks()(func)
         func = option_corpus()(func)
         func = option_rag_topics()(func)
@@ -764,8 +615,6 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
     @option_rag_responses()
     @option_rag_topics()
     @option_nugget_banks()
-    @option_llm_config()
-    @option_submission()
     @click.option("--leaderboard-file", type=ExpandedPath(path_type=Path), help="Leaderboard output file.", required=True)
     @click.option("--leaderboard-format", type=click.Choice(LEADERBOARD_FORMATS), default="ir_measures",
                   help="Leaderboard output format.")
@@ -773,14 +622,12 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
         rag_topics: Iterable[Request],
         rag_responses: Iterable[Report],
         nugget_banks,
-        llm_config: Optional[Path],
-        submission: bool,
         leaderboard_file: Path,
         leaderboard_format: str,
     ):
         """[DEPRECATED] Use 'run --no-create-nuggets' instead."""
         click.echo("Warning: 'judge' command is deprecated. Use 'run --no-create-nuggets' instead.", err=True)
-        resolved_config = _resolve_llm_config(llm_config, submission)
+        resolved_config = LlmConfigBase.from_env()
 
         run_judge(
             auto_judge=auto_judge,
@@ -798,20 +645,16 @@ def auto_judge_to_click_command(auto_judge: AutoJudge, cmd_name: str):
     @option_rag_responses()
     @option_rag_topics()
     @option_nugget_banks()
-    @option_llm_config()
-    @option_submission()
     @click.option("--store-nuggets", type=ExpandedPath(path_type=Path), help="Output nuggets file.", required=True)
     def nuggify_cmd(
         rag_responses: Iterable[Report],
         rag_topics: Iterable[Request],
         nugget_banks,
-        llm_config: Optional[Path],
-        submission: bool,
         store_nuggets: Path
     ):
         """[DEPRECATED] Use 'run --create-nuggets --no-judge' instead."""
         click.echo("Warning: 'nuggify' command is deprecated. Use 'run --create-nuggets --no-judge' instead.", err=True)
-        resolved_config = _resolve_llm_config(llm_config, submission)
+        resolved_config = LlmConfigBase.from_env()
 
         result = run_judge(
             auto_judge=auto_judge,
