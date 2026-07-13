@@ -4,7 +4,7 @@
 
 A **nugget bank** holds, for one topic, the things a good answer should contain. Each *nugget* is either a **question** the answer ought to address (optionally with gold answers) or a **claim** the answer ought to state. A judge builds one nugget bank per topic, then grades each RAG response by how many of the topic's nuggets it covers.
 
-This page builds up a bank for one topic — *"Rising Demand for Avocado"* — starting from the smallest useful form and adding detail step by step.
+This page builds up a nugget bank for one topic — *"Rising Demand for Avocado"* — starting from the smallest useful form and adding detail step by step.
 
 ## 1. The smallest useful bank: a topic and some questions
 
@@ -25,7 +25,7 @@ bank.add_nuggets([
 ])
 ```
 
-`from_lazy` is the convenient constructor — hand it plain strings and it fills in the rest (the `question_id` is a hash of the question text, so the same question always gets the same id). Serialized, the bank looks like this:
+`from_lazy` is the convenient constructor — hand it plain strings and it fills in the rest (the `question_id` is a hash of the question text, so the same question always gets the same id). Serialized, the nugget bank looks like this:
 
 ```json
 {
@@ -47,7 +47,7 @@ bank.add_nuggets([
 }
 ```
 
-Inspect a bank at any point with `print_nugget_json(bank)`.
+Inspect a nugget bank at any point with `print_nugget_json(bank)`.
 
 ## 2. Add gold answers
 
@@ -95,7 +95,7 @@ bank.add_nuggets(
 
 ## 5. Record who created the nuggets
 
-`Creator` documents the provenance of a bank — human assessment or LLM generation — which matters for meta-evaluation:
+`Creator` documents the provenance of a nugget bank — human assessment or LLM generation — which matters for meta-evaluation:
 
 ```python
 from autojudge_base.nugget_data import Creator
@@ -110,12 +110,12 @@ bank.add_creator(Creator(is_human=False, llm_model="gpt-4o",
 
 ## 6. From one topic to many
 
-Your judge produces a bank per topic and returns them together as a `NuggetBanks`, keyed by topic id:
+Your judge produces a nugget bank per topic and returns them together as a `NuggetBanks`, keyed by topic id:
 
 ```python
 from autojudge_base.nugget_data import NuggetBanks
 
-banks = NuggetBanks.from_banks_list([bank])   # add one bank per topic
+banks = NuggetBanks.from_banks_list([bank])   # add one nugget bank per topic
 ```
 
 For reading and writing nugget files, use the I/O helpers (`make_io_functions`, `load_nugget_banks_from_file`); the [develop-an-autojudge](https://github.com/trec-auto-judge/.github/blob/main/profile/howto/03-develop-an-autojudge.md#creating-nuggets) howto shows where this fits in a judge.
@@ -149,5 +149,5 @@ NuggetBanksVerification(banks, expected_topic_ids=topic_ids).all()
 |--------|-------------|
 | `complete_topics()` | every expected topic has a nugget bank |
 | `no_extra_topics()` | no bank exists for an unexpected topic |
-| `non_empty_banks()` | each bank has at least one nugget |
+| `non_empty_banks()` | each nugget bank has at least one nugget |
 | `all()` | all of the above |
