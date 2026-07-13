@@ -1,180 +1,153 @@
-# Usage of NuggetBank (v3) Format
+# NuggetBank (v3) — Getting Started
 
 - contact: Laura Dietz <dietz@cs.unh.edu>
 
+A **nugget bank** holds, for one topic, the things a good answer should contain. Each *nugget* is either a **question** the answer ought to address (optionally with gold answers) or a **claim** the answer ought to state. A judge builds one nugget bank per topic, then grades each RAG response by how many of the topic's nuggets it covers.
+
+This page builds up a bank for one topic — *"Rising Demand for Avocado"* — starting from the smallest useful form and adding detail step by step.
+
+## 1. The smallest useful bank: a topic and some questions
+
+The minimal nugget is just a question. Create a `NuggetBank` for the topic and add a few:
+
 ```python
+from autojudge_base.nugget_data import NuggetBank, NuggetQuestion
 
-from autojudge_base.nugget_data import (
-    NuggetBank, NuggetQuestion, NuggetClaim,
-    Answer, Reference, Offsets, AggregatorType, Creator
-)
+bank = NuggetBank(query_id="1053", title_query="Rising Demand for Avocado")
 
-# Define some answers with optional references
-a1 = Answer.from_lazy(answer="UNESCO provides guidelines")
-a2 = Answer.from_lazy(answer="visitor numbers are restricted")
-a3 = Answer.from_lazy(answer="restoration uses traditional methods")
-
-# Sub-nuggets for a composite question
-sub_nuggets = [
-    NuggetQuestion(query_id="1", question="Who sets guidelines?").add_gold_answers(a1),
-    NuggetQuestion(query_id="1", question="How is wear reduced?").add_gold_answers(a2),
-]
-
-# Main question with sub-nuggets
-nug1 = (
-    NuggetQuestion(
-        question="What conservation efforts exist at Machu Picchu?",
-        query_id="1",
-        sub_nuggets=sub_nuggets
-    )
-    .add_gold_answers([a1, a2, a3])
-)
-
-# Reference-based answer
-ref_answer = Answer.from_lazy(
-    answer="15th century",
-    references=["doc123", "doc456"]
-)
-
-nug2 = NuggetQuestion(
-    query_id="1",
-    question="When was Machu Picchu built?",
-    operator=Operator.OR
-).add_gold_answers([ref_answer])
-
-# Simple claim
-claim = NuggetClaim(
-    query_id="1",
-    claim="There are unicorns in the world",
-    related_question_text="Where are unicorns born?",
-    related_answer=[Answer(answer="where their mom is")],
-    references=[Reference(
-        doc_id="123",
-        collection="mydocs",
-        offsets=Offsets(start_offset=0, end_offset=10, encoding="utf-8")
-    )]
-)
-
-# Create the nugget bank and add all nuggets
-nugget_bank = NuggetBank(query_id="1", title_query="Machu Picchu facts",
-full_query={"background":
-"As an archaeologist leading an expedition in South America, I require insights into the \"Mysteries of Machu Picchu's Architecture\" to deepen our team\'s understanding of its construction techniques and historical significance. This report will guide our fieldwork and contribute to the scholarly discourse on Incan civilization."
-,"problem_statement":"Produce a report on the mysteries of Machu Picchu's architecture. The focus of the report is on speculations and theories regarding the construction methods and architectural marvels of Machu Picchu. I am also interested in hypotheses about the purpose, techniques, and significance of the unique structures at this ancient Incan site."},
-test_collection="neuclir24")
-
-nugget_bank.add_nuggets([nug1, nug2, claim])
-nugget_bank.add_creator(Creator(
-    is_human=true,
-    contact=["NIST", "Dawn Lawrie"]
-))
-
-
-# -----------------------
-# More elaborate example
-
-# Create a detailed creator entry
-creator = Creator(
-    is_human=False,
-    llm_model="gpt2",
-    format="v2",
-    contact=["Laura"],
-    llm_prompt=["Does this passage correctly answer this question? {passage}, {question}, {gold_answer}"],
-    llm_prompt_strategy="static"
-)
-
-# Build answer references
-references = [
-    Reference(
-        doc_id="doc123",
-        text="Machu Picchu is situated at 2430 meters above sea level.",
-        offsets=Offsets(start_offset=0, end_offset=55, encoding="UTF-8"),
-        creator=[creator]
-    ),
-    Reference(
-        doc_id="doc456",
-        text="The ancient citadel stands high in the Andes mountains.",
-        offsets=Offsets(start_offset=10, end_offset=60, encoding="UTF-8"),
-        creator=[creator]
-    )
-]
-
-# Compose the nugget question with metadata and multiple answers
-nugget = NuggetQuestion(
-    question="What is the elevation of Machu Picchu?",
-    query_id="q42",
-    metadata={"source": "LLM-generated prompt v2", "difficulty": "medium"}
-).add_gold_answers([
-    Answer(answer="2430 meters", references=[references[0]]),
-    Answer(answer="2430m above sea level", references=[references[1]])
+bank.add_nuggets([
+    NuggetQuestion.from_lazy(query_id="1053",
+        question="What percentage of U.S. avocado imports is supplied by Mexico?"),
+    NuggetQuestion.from_lazy(query_id="1053",
+        question="How many liters of water are required to produce one kilogram of avocado?"),
+    NuggetQuestion.from_lazy(query_id="1053",
+        question="What are the main environmental impacts of avocado farming?"),
 ])
-
-# Create and populate the NuggetBank
-bank = NuggetBank(query_id="q42", title_query="Machu Picchu facts")
-bank.add_nuggets(nugget)
-
-
-# Optional: print as JSON
-from autojudge_base.nugget_data import print_nugget_json
-print_nugget_json(nugget_bank)
-
-
-# Save to .json.gz file
-output_path = Path("machu_picchu_nuggets.json.gz")
-with gzip.open(output_path, "wt", encoding="utf-8") as f:
-    json.dump(nugget_bank.model_dump(exclude_none=True), f, indent=2)
-
-print(f"NuggetBank saved to: {output_path}")
-
-
 ```
+
+`from_lazy` is the convenient constructor — hand it plain strings and it fills in the rest (the `question_id` is a hash of the question text, so the same question always gets the same id). Serialized, the bank looks like this:
+
+```json
+{
+  "query_id": "1053",
+  "title_query": "Rising Demand for Avocado",
+  "format_version": "v3",
+  "nugget_bank": {
+    "What percentage of U.S. avocado imports is supplied by Mexico?": {
+      "question": "What percentage of U.S. avocado imports is supplied by Mexico?",
+      "question_id": "c9391413e0dbae07eb36b484dcbcab2a",
+      "query_id": "1053"
+    },
+    "How many liters of water are required to produce one kilogram of avocado?": {
+      "question": "How many liters of water are required to produce one kilogram of avocado?",
+      "question_id": "0aa940f1a0e1eec06b67f46719e1201f",
+      "query_id": "1053"
+    }
+  }
+}
+```
+
+Inspect a bank at any point with `print_nugget_json(bank)`.
+
+## 2. Add gold answers
+
+A question becomes far more useful for grading when it carries the answer a correct response should give. Pass `gold_answers` — one string, or several acceptable phrasings:
+
+```python
+NuggetQuestion.from_lazy(query_id="1053",
+    question="What percentage of U.S. avocado imports is supplied by Mexico?",
+    gold_answers=["about 90%", "roughly 90 percent"])
+```
+
+## 3. Point at the documents that support an answer
+
+`references` records which corpus documents back a nugget — a doc id is enough to start:
+
+```python
+NuggetQuestion.from_lazy(query_id="1053",
+    question="How many liters of water are required to produce one kilogram of avocado?",
+    gold_answers="around 2000 liters",
+    references=["doc-042"])
+```
+
+For a precise citation, use a `Reference` with character offsets instead of a bare id:
+
+```python
+from autojudge_base.nugget_data import Reference, Offsets
+
+Reference(doc_id="doc-042", collection="avocado-corpus",
+          text="Producing one kilogram of avocados takes roughly 2,000 litres of water.",
+          offsets=Offsets(start_offset=0, end_offset=70, encoding="utf-8"))
+```
+
+## 4. Claims — fact-style nuggets
+
+When the thing a good answer should contain is a statement rather than a question, use a `NuggetClaim`. Claims live in the same bank, alongside questions:
+
+```python
+from autojudge_base.nugget_data import NuggetClaim
+
+bank.add_nuggets(
+    NuggetClaim.from_lazy(query_id="1053",
+        claim="Mexico is the world's largest avocado exporter.",
+        references=["doc-108"]))
+```
+
+## 5. Record who created the nuggets
+
+`Creator` documents the provenance of a bank — human assessment or LLM generation — which matters for meta-evaluation:
+
+```python
+from autojudge_base.nugget_data import Creator
+
+# Human-authored
+bank.add_creator(Creator(is_human=True, contact=["NIST", "assessor-7"]))
+
+# LLM-generated
+bank.add_creator(Creator(is_human=False, llm_model="gpt-4o",
+                         llm_prompt_strategy="query-only"))
+```
+
+## 6. From one topic to many
+
+Your judge produces a bank per topic and returns them together as a `NuggetBanks`, keyed by topic id:
+
+```python
+from autojudge_base.nugget_data import NuggetBanks
+
+banks = NuggetBanks.from_banks_list([bank])   # add one bank per topic
+```
+
+For reading and writing nugget files, use the I/O helpers (`make_io_functions`, `load_nugget_banks_from_file`); the [develop-an-autojudge](https://github.com/trec-auto-judge/.github/blob/main/profile/howto/03-develop-an-autojudge.md#creating-nuggets) howto shows where this fits in a judge.
 
 ---
 
 ## Verification
 
-NuggetBanks can be verified against expected topic IDs to ensure completeness.
+Verify a `NuggetBanks` against the topics you expected to cover — this turns silent gaps (a missing topic, an empty bank) into a loud error instead of a wrong-but-plausible evaluation. The workflow runner does this automatically before judging; call it yourself in tests and scripts.
 
-### Quick Verification via `.verify()`
-
-The simplest way to verify nugget banks:
+### Quick check with `.verify()`
 
 ```python
 topic_ids = [t.request_id for t in topics]
-nugget_banks.verify(
-    expected_topic_ids=topic_ids,
-    warn=False  # raise exceptions on failure
-)
+banks.verify(expected_topic_ids=topic_ids, warn=False)  # warn=True prints instead of raising
 ```
 
-Parameters:
-- `expected_topic_ids`: List of topic IDs that should have nugget banks
-- `warn`: If `True`, print warnings instead of raising exceptions
-
-### Detailed Verification via `NuggetBanksVerification`
-
-For more granular control or test cases, use the fluent `NuggetBanksVerification` class:
+### Granular checks with `NuggetBanksVerification`
 
 ```python
 from autojudge_base.nugget_data import NuggetBanksVerification
 
-# Chain specific checks
-NuggetBanksVerification(
-    nugget_banks,
-    expected_topic_ids=topic_ids,
-    warn=False
-).complete_topics().no_extra_topics().non_empty_banks()
+NuggetBanksVerification(banks, expected_topic_ids=topic_ids, warn=False) \
+    .complete_topics().no_extra_topics().non_empty_banks()
 
-# Or run all checks
-NuggetBanksVerification(nugget_banks, expected_topic_ids=topic_ids).all()
+# or run every check at once:
+NuggetBanksVerification(banks, expected_topic_ids=topic_ids).all()
 ```
 
-Available verification methods:
-
-| Method | Description |
+| Method | Checks that |
 |--------|-------------|
-| `complete_topics()` | Every expected topic has a nugget bank |
-| `no_extra_topics()` | No nugget banks for unexpected topics |
-| `non_empty_banks()` | Each nugget bank has at least one nugget |
-| `all()` | Run all checks |
-
-This prevents silent issues like missing topics or empty nugget banks from propagating through the evaluation pipeline.
+| `complete_topics()` | every expected topic has a nugget bank |
+| `no_extra_topics()` | no bank exists for an unexpected topic |
+| `non_empty_banks()` | each bank has at least one nugget |
+| `all()` | all of the above |
