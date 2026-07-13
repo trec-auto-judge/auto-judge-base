@@ -42,13 +42,19 @@ test = [
     "tira",
     "trectools",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+    "griffe-pydantic>=1.0",
+]
 
 [project.scripts]
 auto-judge = "autojudge_base.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/trec-autojudge/auto-judge-base"
-Repository = "https://github.com/trec-autojudge/auto-judge-base"
+Homepage = "https://github.com/trec-auto-judge/auto-judge-base"
+Repository = "https://github.com/trec-auto-judge/auto-judge-base"
+Documentation = "https://trec-auto-judge.github.io/auto-judge-base/"
 
 [tool.setuptools.packages.find]
 where = ["src"]
