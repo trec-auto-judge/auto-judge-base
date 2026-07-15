@@ -37,10 +37,13 @@ class ReportMetaData(BaseModel):
     
     # rag25
     # include narrative_id (topic id) and narrative (topic text)
-    # if the track requires them; 
+    # if the track requires them;
     # collection_ids should be ["msmarco_v2.1_doc_segmented"].
     narrative_id:Optional[str|int] = None  # topic_id
     narrative:Optional[str] = None  # topic text
+
+    # rag26: short description of the submitted system or run
+    run_desc:Optional[str] = None
 
 
     # AutoJudge
