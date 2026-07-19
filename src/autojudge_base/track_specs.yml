@@ -1,0 +1,120 @@
+# DRAFT track-year submission specs (Laura's implementation of the organizers' specs).
+# YAML-serializable: sentence_type tags resolve to sentence classes at load time.
+# Keyed by track-year id (matches datasets.yml track:). The task field here is the
+# pipeline sub-task (generation/repgen), NOT the cosmetic RAGTIME metadata.task field.
+#
+# Field notes:
+#   sentence_type       - LIST of accepted citation representations; first is canonical for
+#                         emit, all are accepted for verify. Tags rag24, ragtime, neuclir
+#                         (rag24 = int indices, ragtime = doc-id to score map, neuclir =
+#                         doc-id list). A track may accept several; rag25 accepts rag24 and
+#                         neuclir. A bare scalar is coerced to a 1-element list.
+#   sentences_key       - top-level key holding the sentence list on the wire (answer/responses)
+#   topic_id_field      - metadata key carrying the topic id (narrative_id/topic_id)
+#   mandatory_metadata  - keys that must be present and non-empty. id fields may be str OR int.
+#   forbid_extra_metadata   - if true, allowed keys equal mandatory_metadata exactly (no extras)
+#   require_exact_narrative - if true, metadata.narrative must exactly copy the topic text
+#                         (a report-by-topics cross-check; RAG only)
+#   references_kind     - cited_only (refs equal the set of cited), retrieval_list (refs is the
+#                         retrieval ranking, cited is a subset, len at most references_max), or
+#                         none (no references field; citations are self-contained doc-ids)
+#   length              - length_limit (fixed) XOR length_limit_request_field (Request field).
+#                         Unit picks the counter: words = worst-case NFKC/split, chars = NFKC chars.
+#   docid_pattern       - regex the citation/reference doc-ids must match (null = skip)
+
+specs:
+
+  rag26:                                 # CONFIRMED against trec-rag-skills references/rag-task.md
+    track: rag26
+    task: generation
+    sentence_type: [rag24, neuclir]      # int indices OR doc-id strings (organizers confirmed 2026-07-19). Emit rag24.
+    sentences_key: answer
+    topic_id_field: narrative_id
+    mandatory_metadata: [team_id, narrative_id, narrative, run_id, run_desc]
+    forbid_extra_metadata: true          # do not add extra keys to the metadata object
+    require_exact_narrative: true
+    run_id_max_len: null                 # no run_id length constraint in the spec
+    docid_pattern: 'shard_\d+_\d+'        # ClimbMix, e.g. shard_00459_61697
+    collection_ids: [climbmix-400b]      # informational; forbidden as a metadata key
+    references_kind: cited_only
+    references_max: null
+    max_citations_per_sentence: 3
+    length_unit: words
+    length_limit: 1024
+    length_limit_request_field: null
+
+  rag25:                                 # CONFIRMED against TREC RAG 2025 track guidelines
+    track: rag25
+    task: generation
+    sentence_type: [rag24, neuclir]      # Format 1 int indices OR Format 2 doc-id strings. Emit rag24.
+    sentences_key: answer
+    topic_id_field: narrative_id
+    mandatory_metadata: [team_id, run_id, type, narrative_id, narrative]   # prompt optional; narrative_id may be int
+    forbid_extra_metadata: false         # prompt (optional) and other extras tolerated
+    require_exact_narrative: true
+    run_id_max_len: null
+    docid_pattern: 'msmarco_v2\.1_doc_\d\d_\d+#\d+_\d+'
+    collection_ids: [msmarco_v2.1_doc_segmented]
+    references_kind: retrieval_list      # references = top-k retrieval list (cited is a subset)
+    references_max: 100
+    max_citations_per_sentence: null     # not specified
+    length_unit: words
+    length_limit: 400
+    length_limit_request_field: null
+
+  ragtime25:                             # from RAGTIME 2025 guidelines
+    track: ragtime25
+    task: repgen
+    sentence_type: [ragtime]
+    sentences_key: responses
+    topic_id_field: topic_id
+    mandatory_metadata: [team_id, topic_id, run_id, task]   # task present; value cosmetic (multilingual or english)
+    forbid_extra_metadata: false
+    require_exact_narrative: false       # no narrative field in output
+    run_id_max_len: null
+    docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'  # NeuCLIR uuid_segment
+    collection_ids: [ragtime/1/all, ragtime/1/eng]
+    references_kind: cited_only
+    references_max: null
+    max_citations_per_sentence: null
+    length_unit: chars
+    length_limit: null
+    length_limit_request_field: limit    # per-request Request.limit (NFKC chars)
+
+  ragtime26:                             # from RAGTIME 2026 guidelines
+    track: ragtime26
+    task: repgen
+    sentence_type: [ragtime]
+    sentences_key: responses
+    topic_id_field: topic_id
+    mandatory_metadata: [team_id, topic_id, run_id, run_desc]   # task dropped, run_desc added
+    forbid_extra_metadata: false
+    require_exact_narrative: false
+    run_id_max_len: 25
+    docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'
+    collection_ids: [ragtime/2/all]
+    references_kind: cited_only
+    references_max: null
+    max_citations_per_sentence: null
+    length_unit: chars
+    length_limit: null
+    length_limit_request_field: limit
+
+  dragun25:                              # from DRAGUN 2025 guidelines (Task 2: Report Generation)
+    track: dragun25
+    task: repgen
+    sentence_type: [neuclir]             # citations = list of doc-id strings; no references field
+    sentences_key: responses
+    topic_id_field: topic_id             # topic_id is itself a MS MARCO document id (the news article)
+    mandatory_metadata: [team_id, run_id, topic_id, type, use_starter_kit]
+    forbid_extra_metadata: false
+    require_exact_narrative: false
+    run_id_max_len: null
+    docid_pattern: 'msmarco_v2\.1_doc_\d\d_\d+#\d+_\d+'
+    collection_ids: [msmarco_v2.1_doc_segmented]
+    references_kind: none                # no references field; citations are self-contained doc-ids
+    references_max: null
+    max_citations_per_sentence: 3
+    length_unit: words
+    length_limit: 250
+    length_limit_request_field: null

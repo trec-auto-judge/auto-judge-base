@@ -249,8 +249,11 @@ class Report(BaseModel):
 
 
 
-    def verify_ragtime(self, use_answer:bool = False):
-        
+    def verify_ragtime(self, use_answer:bool = False, check_doc_ids:bool = True, spec=None):
+        if spec is not None:
+            from autojudge_base.track_spec import verify as _verify_spec
+            return _verify_spec(self, spec, use_answer=use_answer)
+
         def verify_citation_reference():
             citation_set:Set[str] = {c for r in self.responses \
                                         for c in r.citations.keys()   
@@ -276,11 +279,12 @@ class Report(BaseModel):
                     print(f"WARNING: Ragtime Report format contains empty citations: {r}")
                         
         def verify_citation_doc_id():
-            pattern = re.compile(r'^[A-Za-z0-9]+(?:-[A-Za-z0-9]+){4}_[A-Za-z0-9]+$')
-            for r in self.responses:
-                for c,v in r.citations.items():
-                    if not bool(pattern.match(c)):
-                        print(f"WARNING: Ragtime Report format invalid docid? Citation contains document_id does not match format, maybe this document is from the wrong collection? document_id: {c}, but should look like this: \"47601789-65d8-4706-9bde-fc89fccfdf14_159897\"")
+            if check_doc_ids:
+                pattern = re.compile(r'^[A-Za-z0-9]+(?:-[A-Za-z0-9]+){4}_[A-Za-z0-9]+$')
+                for r in self.responses:
+                    for c,v in r.citations.items():
+                        if not bool(pattern.match(c)):
+                            print(f"WARNING: Ragtime Report format invalid docid? Citation contains document_id does not match format, maybe this document is from the wrong collection? document_id: {c}, but should look like this: \"47601789-65d8-4706-9bde-fc89fccfdf14_159897\"")
         
         
         def verify_task():
@@ -297,6 +301,34 @@ class Report(BaseModel):
         
         return True
      
+    def verify(self, spec=None, *, request=None, use_answer: bool = False) -> bool:
+        """Verify this report against a TrackSpec (structural-only if spec is None).
+
+        Delegates to autojudge_base.track_spec.verify. `request` is needed only for
+        tracks whose length limit is stored per-request (RAGTIME).
+        """
+        from autojudge_base.track_spec import verify as _verify_spec
+        return _verify_spec(self, spec, request=request, use_answer=use_answer)
+
+    def verify_rag(self, use_answer: bool = False, spec=None) -> bool:
+        """Verify against a RAG spec (default: the latest RAG track, rag26).
+
+        Backwards-compatible convenience wrapper over `verify(spec)`.
+        """
+        from autojudge_base.track_spec import verify as _verify_spec, SPECS
+        return _verify_spec(self, spec or SPECS["rag26"], use_answer=use_answer)
+
+    def to_rag(self, spec=None) -> "Report":
+        """Convert to a RAG report (default: RAG 2025 generation). See track_spec.to_rag."""
+        from autojudge_base.track_spec import to_rag as _to_rag
+        return _to_rag(self, spec)
+
+    def to_ragtime(self, spec=None) -> "Report":
+        """Convert to a RAGTIME report (default: RAGTIME 2025 repgen). See track_spec.to_ragtime."""
+        from autojudge_base.track_spec import to_ragtime as _to_ragtime
+        return _to_ragtime(self, spec)
+
+
 def extract_doc_ids_from_report(report: Report, cited_only: bool = False) -> Set[str]:
     """Extract all unique document IDs from a Report's citations.
 
@@ -456,7 +488,7 @@ def load_report(reports_path:Path)->List[Report]:
     with open(file=reports_path) as f:
         for line in f.readlines():
             data = json.load(fp=StringIO(line))
-            report = Report.validate(data)
+            report = Report.model_validate(data)
             report.path = reports_path.absolute()
             reports.append(report)
     return reports

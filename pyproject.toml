@@ -62,6 +62,10 @@ Documentation = "https://trec-auto-judge.github.io/auto-judge-base/"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# ship data files (e.g. track_specs.yml, loaded at import by track_spec.py) in the wheel
+autojudge_base = ["*.yml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
