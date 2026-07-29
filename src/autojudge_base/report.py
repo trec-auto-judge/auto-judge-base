@@ -12,7 +12,7 @@ never inferred from the data:
     errors = report.check("rag26")  # -> [] if valid, else every violation (collect mode)
     obj = submission_dict(convert(report, "rag26"), "rag26")  # -> wire-format dict
 
-Verification lives in `track_spec_verification`, spec data in `track_spec`, and the
+Verification lives in `report_spec_verification`, spec data in `track_spec`, and the
 sentence models in `report_sentences`. A CLI wraps this: `python -m
 autojudge_base.report_tool check|convert`. See README.md.
 """
@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from autojudge_base.document.document import Document
 # Verification lives in its own module (report-free at runtime), imported top-level
 # here -- mirroring the Leaderboard/Qrels verification layout.
-from autojudge_base import track_spec_verification
+from autojudge_base import report_spec_verification
 from autojudge_base.track_spec import SPECS, sentence_class_for
 
 class TaskType(str, Enum):
@@ -265,7 +265,7 @@ class Report(BaseModel):
         it). Retained only for backwards compatibility.
         """
         if spec is not None:
-            return track_spec_verification.verify(self, spec, use_answer=use_answer)
+            return report_spec_verification.verify(self, spec, use_answer=use_answer)
 
         import warnings
         warnings.warn(
@@ -339,9 +339,9 @@ class Report(BaseModel):
             use_answer: validate `self.answer` instead of `self.responses`.
 
         `spec` may be a TrackSpec or a track-id string (e.g. "rag26").
-        Delegates to autojudge_base.track_spec_verification.verify.
+        Delegates to autojudge_base.report_spec_verification.verify.
         """
-        return track_spec_verification.verify(self, spec, request=request, use_answer=use_answer)
+        return report_spec_verification.verify(self, spec, request=request, use_answer=use_answer)
 
     def check(self, spec=None, *, request=None, use_answer: bool = False):
         """Validate this report against a track spec, COLLECTING all violations.
@@ -354,25 +354,25 @@ class Report(BaseModel):
         Same arguments and rules as `verify` (`spec` may be a TrackSpec or track-id
         string). Returns only hard-ERROR messages; smell categories (TrackSpec.smells)
         are omitted -- use `check_findings` for those. Delegates to
-        autojudge_base.track_spec_verification.check.
+        autojudge_base.report_spec_verification.check.
         """
-        return track_spec_verification.check(self, spec, request=request, use_answer=use_answer)
+        return report_spec_verification.check(self, spec, request=request, use_answer=use_answer)
 
     def check_findings(self, spec=None, *, request=None, use_answer: bool = False):
         """Validate this report and return (errors, warnings).
 
         Like `check`, but also returns the SMELL warnings (findings whose category the
         spec lists in `smells`) as a second list. `errors` empty means the report passes.
-        Delegates to autojudge_base.track_spec_verification.findings.
+        Delegates to autojudge_base.report_spec_verification.findings.
         """
-        return track_spec_verification.findings(self, spec, request=request, use_answer=use_answer)
+        return report_spec_verification.findings(self, spec, request=request, use_answer=use_answer)
 
     def verify_rag(self, use_answer: bool = False, spec=None) -> bool:
         """Verify against a RAG spec (default: the latest RAG track, rag26).
 
         Convenience wrapper over `verify(spec)`.
         """
-        return track_spec_verification.verify(self, spec or SPECS["rag26"], use_answer=use_answer)
+        return report_spec_verification.verify(self, spec or SPECS["rag26"], use_answer=use_answer)
 
     def convert(self, spec) -> "Report":
         """Convert this report into another track's compliant shape (explicit spec).

@@ -194,12 +194,11 @@ def test_cli_check_topics_enforces_ragtime_length(tmp_path: Path):
     assert strict.exit_code == 255
 
 
-def test_fmt_topics():
-    from autojudge_base.report_tool import _fmt_topics, _signature
-    assert _fmt_topics(["1", "2", "3"], 3) == "all 3 topics"
-    assert _fmt_topics(["1001", "1002", "1003", "1005"], 10) == "1001-1003, 1005"
-    assert _fmt_topics(["a", "b"], 5) == "a, b"       # non-integer ids -> plain list
-    # similar messages share a signature (masked doc-id)
+def test_grouping_helpers():
+    from autojudge_base.report_tool import _signature
+    from autojudge_base.report_verification import fmt_ids
+    assert fmt_ids(["1001", "1002", "1003", "1005"]) == "1001-1003, 1005"
+    # similar messages share a signature (masked doc-id), so they collate into one group
     assert _signature("cited doc-id 'x' bad") == _signature("cited doc-id 'y' bad")
 
 

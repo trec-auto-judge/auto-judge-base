@@ -641,7 +641,7 @@ def test_to_rag_to_ragtime_deprecated():
 
 
 def test_verification_error_is_runtimeerror_subclass():
-    from autojudge_base.track_spec_verification import TrackSpecVerificationError
+    from autojudge_base.report_spec_verification import TrackSpecVerificationError
     assert issubclass(TrackSpecVerificationError, RuntimeError)
     bad = rag26_report()
     bad.metadata.run_desc = ""

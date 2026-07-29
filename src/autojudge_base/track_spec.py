@@ -9,7 +9,7 @@ via `load_spec_file()` to cover a track before its base release.
 This module holds only the spec data + registry + small pure helpers, and imports
 `report_sentences` (not `report`) so it stays free of any runtime dependency on the
 Report class. The behavior lives in sibling modules:
-- verification: `autojudge_base.track_spec_verification` (`verify`, `check`)
+- verification: `autojudge_base.report_spec_verification` (`verify`, `check`)
 - conversion:   `autojudge_base.report` (`convert`, and the deprecated `to_rag`/`to_ragtime`)
 
 For backwards compatibility those names are still importable from here (see
@@ -60,7 +60,7 @@ def tag_of_sentence(sentence) -> Optional[str]:
 
 
 # Finding categories treated as WARNINGS (smells), not failures, unless a spec overrides
-# `smells`. Category names are defined in track_spec_verification (CAT_*) and the CLI
+# `smells`. Category names are defined in report_spec_verification (CAT_*) and the CLI
 # coverage checks (e.g. "duplicate_topics").
 DEFAULT_SMELLS = ("empty_answer", "blank_sentence", "duplicate_topics", "references_duplicate")
 
@@ -177,11 +177,11 @@ def length_count(texts, unit: str) -> int:
 
 
 # --- backwards-compat re-exports -------------------------------------------------
-# verify/check moved to track_spec_verification; convert/to_rag/to_ragtime moved to
+# verify/check moved to report_spec_verification; convert/to_rag/to_ragtime moved to
 # report. Lazily forward the old import paths (no import-time cycle).
 def __getattr__(name: str):
     if name in ("verify", "check", "findings", "TrackSpecVerification", "TrackSpecVerificationError"):
-        from autojudge_base import track_spec_verification as _v
+        from autojudge_base import report_spec_verification as _v
         return getattr(_v, name)
     if name in ("convert", "to_rag", "to_ragtime"):
         from autojudge_base import report as _r

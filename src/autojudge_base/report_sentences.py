@@ -2,7 +2,7 @@
 
 Kept in their own leaf module (no dependency on report.py) so the track-spec
 verifier can reference them at runtime without importing the Report class -- which
-lets report.py import the verifier at top level (see track_spec_verification.py),
+lets report.py import the verifier at top level (see report_spec_verification.py),
 mirroring the Leaderboard/Qrels verification layout.
 
 The three representations are organizer-defined wire formats:
