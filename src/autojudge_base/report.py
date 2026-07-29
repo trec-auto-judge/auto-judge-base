@@ -1,3 +1,21 @@
+"""RAG-family report models and operations.
+
+`Report` is a permissive binding that loads any TREC RAG-family submission format;
+`load_report(path)` reads a submission JSONL. Validate or convert against a *track spec*
+(a track-id string like "rag26", or a `TrackSpec`) -- the spec is always caller-supplied,
+never inferred from the data:
+
+    from autojudge_base.report import load_report, convert, submission_dict
+
+    report = load_report("run.jsonl")[0]
+    report.verify("rag26")          # -> True, or raises TrackSpecVerificationError (first problem)
+    errors = report.check("rag26")  # -> [] if valid, else every violation (collect mode)
+    obj = submission_dict(convert(report, "rag26"), "rag26")  # -> wire-format dict
+
+Verification lives in `track_spec_verification`, spec data in `track_spec`, and the
+sentence models in `report_sentences`. A CLI wraps this: `python -m
+autojudge_base.report_tool check|convert`. See README.md.
+"""
 import argparse
 from enum import Enum
 import gzip
@@ -8,6 +26,10 @@ from pathlib import Path
 import json
 from pydantic import BaseModel, ConfigDict, Field
 from autojudge_base.document.document import Document
+# Verification lives in its own module (report-free at runtime), imported top-level
+# here -- mirroring the Leaderboard/Qrels verification layout.
+from autojudge_base import track_spec_verification
+from autojudge_base.track_spec import SPECS, sentence_class_for
 
 class TaskType(str, Enum):
     """Ragtime tasks"""
@@ -88,27 +110,14 @@ class ReportMetaData(BaseModel):
 
 
     
-class NeuclirReportSentence(BaseModel):
-    citations: Optional[List[str]] = None    
-    text:str
-    metadata: Optional[Dict[str,Any]] = None
-    evaldata: Optional[Dict[str,Any]] = None
-
-
-class RagtimeReportSentence(BaseModel):
-    citations: Optional[Dict[str,float]] = None
-    text:str
-    metadata: Optional[Dict[str,Any]] = None
-    evaldata: Optional[Dict[str,Any]] = None
-
-class Rag24ReportSentence(BaseModel):
-    citations: Optional[List[int]] = None    
-    text:str
-    metadata: Optional[Dict[str,Any]] = None
-    evaldata: Optional[Dict[str,Any]] = None
-
-
-ReportSentence: TypeAlias = RagtimeReportSentence | NeuclirReportSentence | Rag24ReportSentence
+# Sentence models live in their own leaf module so the verifier can import them
+# without importing Report; re-exported here for backwards compatibility.
+from autojudge_base.report_sentences import (  # noqa: E402
+    NeuclirReportSentence,
+    Rag24ReportSentence,
+    RagtimeReportSentence,
+    ReportSentence,
+)
 
 
 class RankedDocument(BaseModel):
@@ -250,9 +259,20 @@ class Report(BaseModel):
 
 
     def verify_ragtime(self, use_answer:bool = False, check_doc_ids:bool = True, spec=None):
+        """DEPRECATED: legacy in-place RAGTIME validator, superseded by the track-spec
+        framework. Prefer ``report.verify(spec=SPECS["ragtime25"])`` /
+        ``verify(spec=SPECS["ragtime26"])`` (or pass ``spec=`` here, which delegates to
+        it). Retained only for backwards compatibility.
+        """
         if spec is not None:
-            from autojudge_base.track_spec import verify as _verify_spec
-            return _verify_spec(self, spec, use_answer=use_answer)
+            return track_spec_verification.verify(self, spec, use_answer=use_answer)
+
+        import warnings
+        warnings.warn(
+            "Report.verify_ragtime() (no spec) is deprecated; use the track-spec "
+            "framework: report.verify(spec=SPECS['ragtime26']).",
+            DeprecationWarning, stacklevel=2,
+        )
 
         def verify_citation_reference():
             citation_set:Set[str] = {c for r in self.responses \
@@ -302,31 +322,204 @@ class Report(BaseModel):
         return True
      
     def verify(self, spec=None, *, request=None, use_answer: bool = False) -> bool:
-        """Verify this report against a TrackSpec (structural-only if spec is None).
+        """Validate this report against a track spec, RAISING on the first violation.
 
-        Delegates to autojudge_base.track_spec.verify. `request` is needed only for
-        tracks whose length limit is stored per-request (RAGTIME).
+        Fail-fast gate: returns True if the report satisfies `spec`, otherwise raises
+        RuntimeError describing the first problem. Use where an invalid report must not
+        proceed -- an emit/submission gate or a pipeline assertion.
+
+        To instead get EVERY problem back without raising, use `check` (they share the
+        same rules; `verify` just raises the first thing `check` would return).
+
+        Args:
+            spec: the TrackSpec to validate against; None runs structural-only checks
+                (citations resolve, text non-empty) with no track policy.
+            request: only needed for tracks whose length limit lives on the Request
+                (RAGTIME per-topic character budget); ignored otherwise.
+            use_answer: validate `self.answer` instead of `self.responses`.
+
+        `spec` may be a TrackSpec or a track-id string (e.g. "rag26").
+        Delegates to autojudge_base.track_spec_verification.verify.
         """
-        from autojudge_base.track_spec import verify as _verify_spec
-        return _verify_spec(self, spec, request=request, use_answer=use_answer)
+        return track_spec_verification.verify(self, spec, request=request, use_answer=use_answer)
+
+    def check(self, spec=None, *, request=None, use_answer: bool = False):
+        """Validate this report against a track spec, COLLECTING all violations.
+
+        Non-raising counterpart to `verify`: returns a list of human-readable violation
+        messages (an empty list means valid) instead of stopping at the first problem.
+        Use to triage/ingest data where you want to surface everything at once -- a
+        submission validator, or a non-fatal pipeline warning.
+
+        Same arguments and rules as `verify` (`spec` may be a TrackSpec or track-id
+        string). Returns only hard-ERROR messages; smell categories (TrackSpec.smells)
+        are omitted -- use `check_findings` for those. Delegates to
+        autojudge_base.track_spec_verification.check.
+        """
+        return track_spec_verification.check(self, spec, request=request, use_answer=use_answer)
+
+    def check_findings(self, spec=None, *, request=None, use_answer: bool = False):
+        """Validate this report and return (errors, warnings).
+
+        Like `check`, but also returns the SMELL warnings (findings whose category the
+        spec lists in `smells`) as a second list. `errors` empty means the report passes.
+        Delegates to autojudge_base.track_spec_verification.findings.
+        """
+        return track_spec_verification.findings(self, spec, request=request, use_answer=use_answer)
 
     def verify_rag(self, use_answer: bool = False, spec=None) -> bool:
         """Verify against a RAG spec (default: the latest RAG track, rag26).
 
-        Backwards-compatible convenience wrapper over `verify(spec)`.
+        Convenience wrapper over `verify(spec)`.
         """
-        from autojudge_base.track_spec import verify as _verify_spec, SPECS
-        return _verify_spec(self, spec or SPECS["rag26"], use_answer=use_answer)
+        return track_spec_verification.verify(self, spec or SPECS["rag26"], use_answer=use_answer)
+
+    def convert(self, spec) -> "Report":
+        """Convert this report into another track's compliant shape (explicit spec).
+
+        Returns a NEW Report whose sentence representation, references and metadata all
+        match `spec` (a TrackSpec or track-id string), so serializing it yields spec-valid
+        output. See the module-level `convert`.
+        """
+        return convert(self, spec)
 
     def to_rag(self, spec=None) -> "Report":
-        """Convert to a RAG report (default: RAG 2025 generation). See track_spec.to_rag."""
-        from autojudge_base.track_spec import to_rag as _to_rag
-        return _to_rag(self, spec)
+        """DEPRECATED: use `convert(spec)` with an explicit RAG spec (e.g. "rag26")."""
+        return to_rag(self, spec)
 
     def to_ragtime(self, spec=None) -> "Report":
-        """Convert to a RAGTIME report (default: RAGTIME 2025 repgen). See track_spec.to_ragtime."""
-        from autojudge_base.track_spec import to_ragtime as _to_ragtime
-        return _to_ragtime(self, spec)
+        """DEPRECATED: use `convert(spec)` with an explicit RAGTIME spec (e.g. "ragtime26")."""
+        return to_ragtime(self, spec)
+
+
+# --- conversion (build a spec-compliant Report from any input format) -----------
+# Lives here (not in track_spec) because it constructs Report/ReportMetaData; that
+# keeps track_spec free of any runtime dependency on report.py.
+
+def _map_metadata(src: "ReportMetaData", spec) -> "ReportMetaData":
+    """Rebuild metadata in the target spec's shape.
+
+    Carries team_id/run_id, puts the canonical topic id in the spec's topic_id_field,
+    and fills the spec's remaining mandatory keys from the source where present
+    (required-but-absent stay None -> verify flags them). Fields the target does not
+    list are dropped (the metadata imposition).
+    """
+    fields = {
+        "team_id": src.team_id,
+        "run_id": src.run_id,
+        spec.topic_id_field: src.topic_id,  # canonical id (topic_id/narrative_id synced)
+    }
+    for key in spec.mandatory_metadata:
+        if key in fields:
+            continue
+        fields[key] = src.narrative if key == "narrative" else getattr(src, key, None)
+    return ReportMetaData(**fields)
+
+
+def convert(report: Report, spec) -> Report:
+    """Build a NEW Report in the target spec's wire shape.
+
+    `spec` may be a TrackSpec or a track-id string (e.g. "rag26"). Sentences use
+    spec.emit_sentence_type, citations are truncated to spec.max_citations_per_sentence
+    (kept top-ranked, since the resolver orders by confidence), references follow
+    spec.references_kind (built AFTER truncation so cited_only stays exact), and metadata
+    is remapped to the spec (see _map_metadata). Source citations are read via the
+    format-agnostic resolver, so any input representation converts.
+    """
+    from autojudge_base.track_spec import get_spec
+    if isinstance(spec, str):
+        spec = get_spec(spec)
+    tag = spec.emit_sentence_type
+    cls = sentence_class_for(tag)
+    maxc = spec.max_citations_per_sentence
+    resolved = report.get_sentences_with_citations()  # -> Neuclir doc-id lists, ranked
+
+    per_sentence = [
+        (s, list(s.citations or [])[:maxc] if maxc is not None else list(s.citations or []))
+        for s in resolved
+    ]
+
+    references: List[str] = []
+    index: Dict[str, int] = {}
+    for _s, dids in per_sentence:
+        for d in dids:
+            if d not in index:
+                index[d] = len(references)
+                references.append(d)
+
+    def emit_citations(dids):
+        if tag == "rag24":
+            return [index[d] for d in dids]
+        if tag == "ragtime":
+            return {d: 1.0 for d in dids}
+        return list(dids)  # neuclir
+
+    new_sentences = [
+        cls(text=s.text, citations=emit_citations(dids), metadata=s.metadata, evaldata=s.evaldata)
+        for s, dids in per_sentence
+    ]
+
+    return Report(
+        is_ragtime=(tag == "ragtime"),
+        metadata=_map_metadata(report.metadata, spec),
+        responses=new_sentences,
+        references=None if spec.references_kind == "none" else references,
+    )
+
+
+def to_rag(report: Report, spec=None) -> Report:
+    """DEPRECATED: use `convert(report, spec)` with an explicit RAG spec.
+
+    Defaulting a spec is the implicit spec-selection the framework avoids; call
+    `convert(report, "rag26")` (or another RAG spec) instead.
+    """
+    import warnings
+    warnings.warn(
+        "to_rag is deprecated; use convert(report, spec) with an explicit spec, "
+        "e.g. convert(report, 'rag26').",
+        DeprecationWarning, stacklevel=2,
+    )
+    return convert(report, spec or SPECS["rag25"])
+
+
+def to_ragtime(report: Report, spec=None) -> Report:
+    """DEPRECATED: use `convert(report, spec)` with an explicit RAGTIME spec.
+
+    Call `convert(report, "ragtime26")` (or another RAGTIME spec) instead.
+    """
+    import warnings
+    warnings.warn(
+        "to_ragtime is deprecated; use convert(report, spec) with an explicit spec, "
+        "e.g. convert(report, 'ragtime26').",
+        DeprecationWarning, stacklevel=2,
+    )
+    return convert(report, spec or SPECS["ragtime25"])
+
+
+def submission_dict(report: Report, spec) -> Dict[str, Any]:
+    """Serialize a Report to a track's wire-format JSON object per `spec`.
+
+    Assumes the report already matches the spec's sentence representation -- call
+    `convert(report, spec)` first if it might not. Metadata is reduced to the spec's
+    mandatory keys (the topic-id field stringified); sentences go under
+    spec.sentences_key; `references` is included unless references_kind == "none".
+    `spec` may be a TrackSpec or a track-id string.
+    """
+    from autojudge_base.track_spec import get_spec
+    if isinstance(spec, str):
+        spec = get_spec(spec)
+    md = report.metadata
+    metadata = {
+        key: (str(getattr(md, key)) if key == spec.topic_id_field else getattr(md, key))
+        for key in spec.mandatory_metadata
+    }
+    obj: Dict[str, Any] = {"metadata": metadata}
+    if spec.references_kind != "none":
+        obj["references"] = report.references
+    obj[spec.sentences_key] = [
+        {"text": s.text, "citations": s.citations} for s in (report.responses or [])
+    ]
+    return obj
 
 
 def extract_doc_ids_from_report(report: Report, cited_only: bool = False) -> Set[str]:

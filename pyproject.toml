@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autojudge-base"
-version = "0.4.0"
+version = "0.4.1.dev0"
 description = "Core infrastructure for implementing TREC AutoJudge systems"
 readme = "README.md"
 license = {text = "MIT"}
@@ -53,6 +53,7 @@ all = [
 
 [project.scripts]
 auto-judge = "autojudge_base.cli:main"
+auto-judge-report = "autojudge_base.report_tool:main"
 
 [project.urls]
 Homepage = "https://github.com/trec-auto-judge/auto-judge-base"

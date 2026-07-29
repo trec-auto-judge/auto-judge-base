@@ -1,37 +1,36 @@
-"""Track-year submission specs: verify and convert Reports against organizer wire formats.
+"""Track-year submission specs (the DATA layer).
 
-The `Report`/`Request`/`Document` models are permissive *shape bindings* — a superset
-that must LOAD any track's submission. A `TrackSpec` is the per-track-year *policy
-overlay*: which metadata fields are mandatory, which citation representation(s) are
-allowed, the docid pattern, and the length/citation limits. Specs are DATA
-(`track_specs.yml`), bumped yearly; a custom spec file can be loaded via
-`load_spec_file()` to cover a track before its base release.
+A `TrackSpec` is the per-track-year *policy overlay* on top of the permissive
+Report/Request shape bindings: which metadata fields are mandatory, which citation
+representation(s) are allowed, the docid pattern, and the length/citation limits.
+Specs are DATA (`track_specs.yml`), bumped yearly; a custom spec file can be loaded
+via `load_spec_file()` to cover a track before its base release.
 
-Design invariants:
-- The spec is always a CALLER-SUPPLIED parameter, never sniffed from the (self-reported,
-  unreliable) data. `verify(report, spec=None)` with `spec=None` falls back to
-  structural-only checks; passing a spec turns on the strict, collection-aware policy.
-- Fully backwards compatible: nothing here changes existing `Report` behavior; the
-  `Report.verify_rag/verify_ragtime` methods gain an optional trailing `spec=None`.
+This module holds only the spec data + registry + small pure helpers, and imports
+`report_sentences` (not `report`) so it stays free of any runtime dependency on the
+Report class. The behavior lives in sibling modules:
+- verification: `autojudge_base.track_spec_verification` (`verify`, `check`)
+- conversion:   `autojudge_base.report` (`convert`, and the deprecated `to_rag`/`to_ragtime`)
+
+For backwards compatibility those names are still importable from here (see
+`__getattr__` at the bottom): `from autojudge_base.track_spec import verify, convert`.
 
 `sentence_type` is a YAML string tag (`rag24`/`ragtime`/`neuclir`) resolved to a class
 here, so specs stay serializable and carry no hard class references.
 """
 from __future__ import annotations
 
-import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
-from autojudge_base.report import (
+from autojudge_base.report_sentences import (
     NeuclirReportSentence,
     Rag24ReportSentence,
     RagtimeReportSentence,
-    Report,
 )
 
 # --- sentence-type tag <-> class -------------------------------------------------
@@ -60,6 +59,12 @@ def tag_of_sentence(sentence) -> Optional[str]:
 # --- the spec --------------------------------------------------------------------
 
 
+# Finding categories treated as WARNINGS (smells), not failures, unless a spec overrides
+# `smells`. Category names are defined in track_spec_verification (CAT_*) and the CLI
+# coverage checks (e.g. "duplicate_topics").
+DEFAULT_SMELLS = ("empty_answer", "blank_sentence", "duplicate_topics", "references_duplicate")
+
+
 @dataclass(frozen=True)
 class TrackSpec:
     """One track-year's report-submission wire spec (see track_specs.yml for field docs)."""
@@ -75,12 +80,14 @@ class TrackSpec:
     run_id_max_len: Optional[int] = None
     docid_pattern: Optional[str] = None
     collection_ids: Optional[Tuple[str, ...]] = None
-    references_kind: str = "cited_only"       # "cited_only" | "retrieval_list" | "none"
-    references_max: Optional[int] = None
+    references_kind: str = "cited_only"       # "cited_only" | "retrieval_list" | "none" | "ignore"
+    references_optional: bool = False         # if True, absent/empty references are OK; only a
+    references_max: Optional[int] = None      #   non-empty references array is checked (RAGTIME)
     max_citations_per_sentence: Optional[int] = None
     length_unit: str = "words"                # "words" | "chars"
     length_limit: Optional[int] = None
     length_limit_request_field: Optional[str] = None
+    smells: Tuple[str, ...] = ()              # check categories treated as WARNINGS, not failures
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "TrackSpec":
@@ -101,11 +108,14 @@ class TrackSpec:
             docid_pattern=d.get("docid_pattern"),
             collection_ids=tuple(coll) if coll else None,
             references_kind=d.get("references_kind", "cited_only"),
+            references_optional=bool(d.get("references_optional", False)),
             references_max=d.get("references_max"),
             max_citations_per_sentence=d.get("max_citations_per_sentence"),
             length_unit=d.get("length_unit", "words"),
             length_limit=d.get("length_limit"),
             length_limit_request_field=d.get("length_limit_request_field"),
+            # unspecified -> the default smell set; `smells: []` disables all smells
+            smells=tuple(DEFAULT_SMELLS if d.get("smells") is None else d["smells"]),
         )
 
     @property
@@ -140,234 +150,41 @@ def get_spec(track: str, task: Optional[str] = None) -> TrackSpec:
     return spec
 
 
-# --- verification ----------------------------------------------------------------
+# --- length counting (pure text helpers, shared by verify + chop/export) ---------
+# Matches the official RAGTIME validator (hltcoe/rag-run-validator, validate_length):
+# the sentence texts are FIRST joined with single spaces, THEN measured -- 'chars' as
+# NFKC-normalized Unicode characters, 'words' as whitespace-split tokens. Consecutive
+# whitespace is NOT collapsed (the validator counts it as-is).
 
-
-def _sentences(report: Report, use_answer: bool):
-    s = report.answer if use_answer else report.responses
-    if s is None:
-        raise RuntimeError("Report has neither responses nor answer to verify")
-    return s
-
-
-def _cited_doc_ids(sentence, references: List[str]) -> List[str]:
-    tag = tag_of_sentence(sentence)
-    cits = sentence.citations
-    if tag == "rag24":
-        return [references[i] for i in (cits or []) if isinstance(i, int) and 0 <= i < len(references)]
-    if tag == "neuclir":
-        return list(cits or [])
-    if tag == "ragtime":
-        return list((cits or {}).keys())
-    return []
-
-
-def _citation_count(sentence) -> int:
-    c = sentence.citations
-    return len(c) if c else 0
+def _joined(texts) -> str:
+    return " ".join(texts)
 
 
 def _word_count(texts) -> int:
-    l1 = sum(len(unicodedata.normalize("NFKC", t).split()) for t in texts)
-    l2 = sum(len(t.split()) for t in texts)
-    l3 = sum(len(re.findall(r"\w+", unicodedata.normalize("NFKC", t))) for t in texts)
-    return max(l1, l2, l3)
+    # whitespace-split tokens of the space-joined text (validator's 'words' mode)
+    return len(_joined(texts).split())
 
 
 def _char_count(texts) -> int:
-    return sum(len(unicodedata.normalize("NFKC", t)) for t in texts)
+    # NFKC-normalized character length of the space-joined text (validator's 'characters' mode)
+    return len(unicodedata.normalize("NFKC", _joined(texts)))
 
 
-def _verify_metadata(report: Report, spec: TrackSpec) -> None:
-    md = report.metadata
-    for key in spec.mandatory_metadata:
-        val = getattr(md, key, None)
-        if val is None or (isinstance(val, str) and not val.strip()):
-            raise RuntimeError(
-                f"{spec.track}: metadata.{key} must be present and non-empty, got {val!r}"
-            )
-    if spec.run_id_max_len is not None:
-        rid = md.run_id or ""
-        if len(rid) > spec.run_id_max_len:
-            raise RuntimeError(
-                f"{spec.track}: run_id length {len(rid)} exceeds {spec.run_id_max_len}"
-            )
-    # NOTE: forbid_extra_metadata is a RAW-WIRE check (the loaded model always
-    # materializes optional fields as None and syncs id aliases), so it belongs to
-    # file/dict-level validators, not this model-level pass.
+def length_count(texts, unit: str) -> int:
+    """Report length in the spec's unit, matching the official RAGTIME validator: join the
+    sentence texts with single spaces, then count NFKC 'chars' or whitespace-split 'words'."""
+    return _word_count(texts) if unit == "words" else _char_count(texts)
 
 
-def _verify_sentences(report: Report, spec: TrackSpec, sentences) -> None:
-    if not sentences:
-        raise RuntimeError(f"{spec.track}: report has no sentences")
-    refs = report.references or []
-    maxc = spec.max_citations_per_sentence
-    pat = re.compile(spec.docid_pattern) if spec.docid_pattern else None
-    for i, s in enumerate(sentences):
-        tag = tag_of_sentence(s)
-        if tag not in spec.sentence_type:
-            raise RuntimeError(
-                f"{spec.track}: answer[{i}] is {tag or type(s).__name__}, "
-                f"not an accepted sentence_type {list(spec.sentence_type)}"
-            )
-        if not isinstance(s.text, str) or not s.text.strip():
-            raise RuntimeError(f"{spec.track}: answer[{i}].text must be a non-empty string")
-        n = _citation_count(s)
-        if maxc is not None and n > maxc:
-            raise RuntimeError(f"{spec.track}: answer[{i}] has {n} citations (max {maxc})")
-        if tag == "rag24":
-            for c in (s.citations or []):
-                if not isinstance(c, int) or isinstance(c, bool) or not (0 <= c < len(refs)):
-                    raise RuntimeError(
-                        f"{spec.track}: answer[{i}] citation {c!r} is not a valid reference index"
-                    )
-        elif tag == "ragtime":
-            for did, score in (s.citations or {}).items():
-                if not isinstance(score, (int, float)) or isinstance(score, bool):
-                    raise RuntimeError(
-                        f"{spec.track}: answer[{i}] citation {did!r} score must be numeric, got {score!r}"
-                    )
-        if pat is not None:
-            for did in _cited_doc_ids(s, refs):
-                if not pat.match(did):
-                    raise RuntimeError(
-                        f"{spec.track}: cited doc-id {did!r} does not match docid pattern {spec.docid_pattern}"
-                    )
-
-
-def _verify_references(report: Report, spec: TrackSpec, sentences) -> None:
-    refs = report.references
-    cited = set()
-    for s in sentences:
-        cited.update(_cited_doc_ids(s, refs or []))
-
-    if spec.references_kind == "none":
-        if refs:
-            raise RuntimeError(
-                f"{spec.track}: references must be absent/empty (references_kind=none)"
-            )
-        return
-
-    if refs is None:
-        raise RuntimeError(f"{spec.track}: a references array is required")
-    if len(set(refs)) != len(refs):
-        raise RuntimeError(f"{spec.track}: references contains duplicate doc-ids")
-    if spec.docid_pattern:
-        pat = re.compile(spec.docid_pattern)
-        for d in refs:
-            if not pat.match(d):
-                raise RuntimeError(
-                    f"{spec.track}: reference doc-id {d!r} does not match docid pattern {spec.docid_pattern}"
-                )
-
-    if spec.references_kind == "cited_only":
-        if set(refs) != cited:
-            missing = sorted(cited - set(refs))
-            uncited = sorted(set(refs) - cited)
-            raise RuntimeError(
-                f"{spec.track}: references must equal the cited set "
-                f"(cited-but-absent {missing}, present-but-uncited {uncited})"
-            )
-    elif spec.references_kind == "retrieval_list":
-        if not cited.issubset(set(refs)):
-            raise RuntimeError(f"{spec.track}: some cited doc-ids are not in references")
-        if spec.references_max is not None and len(refs) > spec.references_max:
-            raise RuntimeError(
-                f"{spec.track}: references has {len(refs)} entries (max {spec.references_max})"
-            )
-
-
-def _verify_length(report: Report, spec: TrackSpec, sentences, request) -> None:
-    texts = [s.text for s in sentences if isinstance(getattr(s, "text", None), str)]
-    count = _word_count(texts) if spec.length_unit == "words" else _char_count(texts)
-    limit = spec.length_limit
-    if limit is None and spec.length_limit_request_field is not None:
-        if request is None:
-            return  # per-request limit but no Request supplied -> cannot verify; skip silently
-        limit = getattr(request, spec.length_limit_request_field, None)
-    if limit is not None and count > limit:
-        raise RuntimeError(f"{spec.track}: report is {count} {spec.length_unit} (limit {limit})")
-
-
-def _verify_structural(report: Report, sentences) -> bool:
-    """Format-universal checks used when no spec is supplied (spec=None sniff path)."""
-    if not sentences:
-        raise RuntimeError("report has no sentences")
-    refs = report.references or []
-    for i, s in enumerate(sentences):
-        if not isinstance(getattr(s, "text", None), str) or not s.text.strip():
-            raise RuntimeError(f"answer[{i}].text must be a non-empty string")
-        if tag_of_sentence(s) == "rag24":
-            for c in (s.citations or []):
-                if not isinstance(c, int) or isinstance(c, bool) or not (0 <= c < len(refs)):
-                    raise RuntimeError(f"answer[{i}] citation index {c!r} is out of range")
-    return True
-
-
-def verify(report: Report, spec: Optional[TrackSpec] = None, *, request=None, use_answer: bool = False) -> bool:
-    """Verify a Report against a TrackSpec (or structural-only if spec is None).
-
-    Raises RuntimeError on the first violation; returns True if valid. `request` is
-    only needed for tracks whose length limit comes from the Request (RAGTIME).
-    """
-    sentences = _sentences(report, use_answer)
-    if spec is None:
-        return _verify_structural(report, sentences)
-    _verify_metadata(report, spec)
-    _verify_sentences(report, spec, sentences)
-    _verify_references(report, spec, sentences)
-    _verify_length(report, spec, sentences, request)
-    return True
-
-
-# --- conversion ------------------------------------------------------------------
-
-
-def _convert(report: Report, spec: TrackSpec) -> Report:
-    """Build a NEW Report whose sentences use spec.emit_sentence_type and whose
-    references follow spec.references_kind. Source citations are read via the
-    format-agnostic resolver, so any input representation converts."""
-    tag = spec.emit_sentence_type
-    resolved = report.get_sentences_with_citations()  # -> Neuclir sentences (doc-id lists)
-
-    references: List[str] = []
-    index: Dict[str, int] = {}
-    for s in resolved:
-        for d in (s.citations or []):
-            if d not in index:
-                index[d] = len(references)
-                references.append(d)
-
-    new_sentences = []
-    for s in resolved:
-        dids = s.citations or []
-        if tag == "rag24":
-            new_sentences.append(Rag24ReportSentence(
-                text=s.text, citations=[index[d] for d in dids],
-                metadata=s.metadata, evaldata=s.evaldata))
-        elif tag == "neuclir":
-            new_sentences.append(NeuclirReportSentence(
-                text=s.text, citations=list(dids),
-                metadata=s.metadata, evaldata=s.evaldata))
-        elif tag == "ragtime":
-            new_sentences.append(RagtimeReportSentence(
-                text=s.text, citations={d: 1.0 for d in dids},
-                metadata=s.metadata, evaldata=s.evaldata))
-        else:
-            raise KeyError(f"Cannot emit unknown sentence_type tag {tag!r}")
-
-    return Report(
-        metadata=report.metadata.model_copy(),
-        responses=new_sentences,
-        references=None if spec.references_kind == "none" else references,
-    )
-
-
-def to_rag(report: Report, spec: Optional[TrackSpec] = None) -> Report:
-    """Convert to a RAG report (default: RAG 2025 generation, integer-index citations)."""
-    return _convert(report, spec or SPECS["rag25"])
-
-
-def to_ragtime(report: Report, spec: Optional[TrackSpec] = None) -> Report:
-    """Convert to a RAGTIME report (default: RAGTIME 2025 repgen, doc-id->score citations)."""
-    return _convert(report, spec or SPECS["ragtime25"])
+# --- backwards-compat re-exports -------------------------------------------------
+# verify/check moved to track_spec_verification; convert/to_rag/to_ragtime moved to
+# report. Lazily forward the old import paths (no import-time cycle).
+def __getattr__(name: str):
+    if name in ("verify", "check", "findings", "TrackSpecVerification", "TrackSpecVerificationError"):
+        from autojudge_base import track_spec_verification as _v
+        return getattr(_v, name)
+    if name in ("convert", "to_rag", "to_ragtime"):
+        from autojudge_base import report as _r
+        return getattr(_r, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+ 

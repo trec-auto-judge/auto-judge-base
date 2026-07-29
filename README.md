@@ -143,6 +143,46 @@ for report in reports:
 
 Note that formats of different TREC tasks differ slightly. This module will automatically load any and expose it as this one format. Task specific fields, such as `narrative_id` vs `request_id` are also available.
 
+### Verifying & Converting Reports
+
+The `Report` binding is permissive — it loads any TREC RAG-family submission format.
+A **track spec** (`rag26`, `rag25`, `ragtime25`, `ragtime26`, `dragun25`, …) is the
+per-track-year policy: which citation representation is allowed, the docid pattern,
+mandatory metadata, and length/citation limits. The spec is always *caller-supplied*
+(a track-id string or a `TrackSpec`), never guessed from the data.
+
+```python
+from autojudge_base.report import load_report, convert, submission_dict
+
+reports = load_report("run.jsonl")   # any track's format reads in
+report = reports[0]
+
+# Validate against a track spec:
+report.verify("rag26")        # -> True, or raises TrackSpecVerificationError on the first problem
+errors = report.check("rag26")  # -> [] if valid, else a list of EVERY violation (collect mode)
+
+# Convert to another track's compliant shape (sentence type, references, and metadata
+# are all rewritten per the spec), then serialize to that track's wire JSON:
+as_rag = convert(report, "rag26")     # or: report.convert("rag26")
+obj = submission_dict(as_rag, "rag26")  # dict ready for json.dump
+```
+
+`verify` fail-fasts (raises on the first violation) — use it as an emit/submission
+gate; `check` collects every violation — use it to triage or validate a whole file.
+
+**CLI** — the same, over a submission file:
+
+```bash
+# fail fast: stop at the first violation anywhere in the file (submission gate)
+python -m autojudge_base.report_tool verify  run.jsonl --spec rag26
+
+# list every spec violation (collated by issue); --topics also checks topic-id coverage
+python -m autojudge_base.report_tool check   run.jsonl --spec rag26 --topics topics.jsonl
+
+# convert to another format and write a new submission file
+python -m autojudge_base.report_tool convert run.jsonl --to rag26 -o run.rag26.jsonl
+```
+
 ### Loading Requests (Topics/Queries)
 
 A `Request` represents an evaluation topic with the query and context:
