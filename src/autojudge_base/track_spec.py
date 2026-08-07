@@ -65,6 +65,37 @@ def tag_of_sentence(sentence) -> Optional[str]:
 DEFAULT_SMELLS = ("empty_answer", "blank_sentence", "duplicate_topics", "references_duplicate")
 
 
+#: The closed set of finding categories a spec may list under `smells`. The per-report
+#: categories are emitted by report_spec_verification, the last four by
+#: report_verification's cross-report checks. Kept HERE (beside the yml) so spec
+#: loading can fail fast on a typo'd smell -- an unknown category would otherwise be
+#: silently dead configuration that never demotes anything. The coverage contract:
+#: every category below has a both-directions case in tests/test_smell_categories.py.
+KNOWN_SMELL_CATEGORIES = (
+    "empty_answer", "blank_sentence", "citation_format", "citation_count",
+    "reference_index", "citation_score", "docid_pattern", "references_present",
+    "references_missing", "references_duplicate", "references_undeclared",
+    "references_uncited", "references_max", "metadata", "metadata_recommended",
+    "run_id_length", "length",
+    # cross-report (report_verification.py):
+    "duplicate_topics", "missing_topics", "new_topics", "narrative",
+    # NOTE: "structural" (the spec=None fallback) is deliberately absent -- it can
+    # never fire under a spec, so listing it as a smell would be dead configuration.
+)
+
+
+def _validated_smells(d: Dict[str, Any]) -> Tuple[str, ...]:
+    """The spec's smell tuple, failing fast on any category name not in the closed set."""
+    smells = tuple(DEFAULT_SMELLS if d.get("smells") is None else d["smells"])
+    unknown = [s for s in smells if s not in KNOWN_SMELL_CATEGORIES]
+    if unknown:
+        raise ValueError(
+            f"spec {d.get('track', '?')!r} lists unknown smell categor"
+            f"{'y' if len(unknown) == 1 else 'ies'} {unknown} -- known categories: "
+            f"{list(KNOWN_SMELL_CATEGORIES)}")
+    return smells
+
+
 @dataclass(frozen=True)
 class TrackSpec:
     """One track-year's report-submission wire spec (see track_specs.yml for field docs)."""
@@ -117,7 +148,7 @@ class TrackSpec:
             length_limit=d.get("length_limit"),
             length_limit_request_field=d.get("length_limit_request_field"),
             # unspecified -> the default smell set; `smells: []` disables all smells
-            smells=tuple(DEFAULT_SMELLS if d.get("smells") is None else d["smells"]),
+            smells=_validated_smells(d),
         )
 
     @property

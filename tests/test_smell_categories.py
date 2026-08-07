@@ -133,6 +133,40 @@ COVERAGE_CASES = {
 }
 
 
+def test_known_category_registry_is_fully_tested():
+    # The closed set and this matrix must agree exactly: a category without a case
+    # here does not exist, and a case here for an unknown category is a typo.
+    from autojudge_base.track_spec import KNOWN_SMELL_CATEGORIES
+
+    tested = set(CASES) | set(COVERAGE_CASES)
+    untested = sorted(set(KNOWN_SMELL_CATEGORIES) - tested)
+    unknown = sorted(tested - set(KNOWN_SMELL_CATEGORIES))
+    assert not untested, f"categories with no matrix case: {untested}"
+    assert not unknown, f"matrix cases for unknown categories: {unknown}"
+
+
+def test_every_bundled_spec_smell_is_tested():
+    # No bundled spec may list a smell this matrix does not exercise.
+    from autojudge_base.track_spec import SPECS
+
+    tested = set(CASES) | set(COVERAGE_CASES)
+    for name, spec in SPECS.items():
+        missing = sorted(set(spec.smells) - tested)
+        assert not missing, f"spec {name!r} lists untested smell(s): {missing}"
+
+
+def test_unknown_smell_category_raises_at_spec_load():
+    from autojudge_base.track_spec import TrackSpec
+
+    base = dict(track="t", task="generation", sentence_type=["rag24"],
+                sentences_key="answer", topic_id_field="narrative_id",
+                mandatory_metadata=["team_id"])
+    with pytest.raises(ValueError, match="unknown smell"):
+        TrackSpec.from_dict({**base, "smells": ["citation_counts"]})   # typo'd name
+    with pytest.raises(ValueError, match="structural"):
+        TrackSpec.from_dict({**base, "smells": ["structural"]})        # can never fire
+
+
 @pytest.mark.parametrize("category", sorted(COVERAGE_CASES))
 def test_coverage_category_fires_and_demotes(category):
     reports, requests = COVERAGE_CASES[category]

@@ -168,19 +168,23 @@ def test_check_empty_answer_messages_use_sentences_key():
     assert err == [] and warn == ["ragtime25: empty responses given (all sentences blank)"]
 
 
-def test_check_ragtime_references_optional():
-    # RAGTIME: references may be omitted/empty even when docs are cited (references_optional)
+def test_check_ragtime_references_required_complete_exact():
+    # references key is REQUIRED (the official validator rejects its absence) and must
+    # be exactly the cited set: absent and incomplete are both hard errors.
     md = ReportMetaData(team_id="T", topic_id="300", run_id="run", task="multilingual")
     cited = [RagtimeReportSentence(text="Sentence.", citations={UUID: 1.0})]
-    assert check(Report(metadata=md, responses=cited, references=[]), SPECS["ragtime25"]) == []
-    assert check(Report(metadata=md, responses=cited, references=None), SPECS["ragtime25"]) == []
-    # ...a NON-empty references array is checked against the cited set: an UNCITED
-    # entry is a hard error (ragtime does not allow uncited references), while a
-    # cited-but-unlisted doc is only a smell.
+    absent = check(Report(metadata=md, responses=cited, references=None), SPECS["ragtime25"])
+    assert any("requires a references array" in e for e in absent)
+    empty = check(Report(metadata=md, responses=cited, references=[]), SPECS["ragtime25"])
+    assert any("not listed in references" in e for e in empty)   # incomplete -> hard
+    exact = Report(metadata=md, responses=cited, references=[UUID])
+    assert check(exact, SPECS["ragtime25"]) == []
+    # ...and a wrong reference is wrong in BOTH directions, each a hard error: the
+    # entry is uncited AND the cited doc is unlisted (complete-and-exact contract).
     mismatch = Report(metadata=md, responses=cited, references=[UUID2])
-    err, warn = findings(mismatch, SPECS["ragtime25"])
-    assert any("never cited" in e for e in err)              # references_uncited -> hard
-    assert any("not listed in references" in w for w in warn)  # references_undeclared -> smell
+    err, _warn = findings(mismatch, SPECS["ragtime25"])
+    assert any("never cited" in e for e in err)                # references_uncited
+    assert any("not listed in references" in e for e in err)   # references_undeclared
 
 
 def test_check_ragtime_length_from_request():
@@ -188,7 +192,7 @@ def test_check_ragtime_length_from_request():
     # only enforced when a matching Request is supplied.
     from autojudge_base.request import Request
     md = ReportMetaData(team_id="T", topic_id="300", run_id="run", task="multilingual")
-    r = Report(metadata=md, references=[],
+    r = Report(metadata=md, references=[UUID],   # exactly the cited set (required)
                responses=[RagtimeReportSentence(text="x" * 50, citations={UUID: 1.0})])
     assert findings(r, SPECS["ragtime25"]) == ([], [])            # no request -> length skipped
     err, warn = findings(r, SPECS["ragtime25"], request=Request(request_id="300", title="t", limit=10))

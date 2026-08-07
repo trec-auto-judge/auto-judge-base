@@ -125,15 +125,17 @@ specs:
     docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'  # NeuCLIR uuid_segment
     collection_ids: [ragtime/1/all, ragtime/1/eng]
     references_kind: cited_only
-    references_optional: true            # references may be omitted/empty; if given they must match cited
+    # references key is REQUIRED (the official validator's schema rejects its absence)
+    # and must be COMPLETE AND EXACT -- exactly the set of cited documents
+    # (Laura, 2026-08-07). Absent -> references_missing; cited-but-unlisted ->
+    # references_undeclared; uncited entry -> references_uncited; all hard errors.
+    references_optional: false
     references_max: null
     max_citations_per_sentence: 3
     length_unit: chars
     length_limit: null
     length_limit_request_field: limit    # per-request Request.limit (NFKC chars)
-    # references_undeclared stays advisory, but an UNCITED reference entry is a hard
-    # error: ragtime does not allow uncited references (Laura, 2026-08-07).
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_undeclared, citation_count, length]
+    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, citation_count, length]
 
   ragtime26:                             # from RAGTIME 2026 guidelines
     track: ragtime26
@@ -151,16 +153,18 @@ specs:
     docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'
     collection_ids: [ragtime/2/all,ragtime/2/eng]
     references_kind: cited_only
-    references_optional: true            # references may be omitted entirely, OR list
-    references_max: null                 #   exactly the cited documents
+    # references key is REQUIRED (the official validator's schema rejects its absence)
+    # and must be COMPLETE AND EXACT -- exactly the set of cited documents
+    # (Laura, 2026-08-07). Absent -> references_missing; cited-but-unlisted ->
+    # references_undeclared; uncited entry -> references_uncited; all hard errors.
+    # length stays a smell: overlength is truncated before scoring, not rejected.
+    references_optional: false
+    references_max: null
     max_citations_per_sentence: 3
     length_unit: chars
     length_limit: null
     length_limit_request_field: limit
-    # references_uncited is deliberately NOT a smell: "references ... should be the
-    # union of all cited documents" -- an uncited entry is a hard error. length stays
-    # a smell: overlength is truncated before scoring, not rejected.
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_undeclared, citation_count, metadata_recommended, length]
+    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, citation_count, metadata_recommended, length]
 
   dragun25:                              # from DRAGUN 2025 guidelines (Task 2: Report Generation)
     track: dragun25
