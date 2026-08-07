@@ -118,24 +118,26 @@ specs:
     sentence_type: [ragtime, neuclir]    # doc_id:score dict OR plain doc-id list. Emit ragtime.
     sentences_key: responses
     topic_id_field: topic_id
-    mandatory_metadata: [team_id, topic_id, run_id, task]   # task present; value cosmetic (multilingual or english)
+    mandatory_metadata: [team_id, topic_id, run_id]
+    # RELAXED relative to ragtime26 (Laura, 2026-08-07): this spec's practical role is
+    # checking runs NIST already accepted in 2025 -- 38% of them lack the strict
+    # reference contract, and 835 lack metadata.task. So: task is recommended (absence
+    # warns), and absent/incomplete references warn. An UNCITED reference entry stays
+    # a hard error in both ragtime years.
+    recommended_metadata: [task]         # value cosmetic (multilingual or english)
     forbid_extra_metadata: false
     require_exact_narrative: false       # no narrative field in output
     run_id_max_len: 25                   # per the ragtime26 guideline; assumed same in 2025
     docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'  # NeuCLIR uuid_segment
     collection_ids: [ragtime/1/all, ragtime/1/eng]
     references_kind: cited_only
-    # references key is REQUIRED (the official validator's schema rejects its absence)
-    # and must be COMPLETE AND EXACT -- exactly the set of cited documents
-    # (Laura, 2026-08-07). Absent -> references_missing; cited-but-unlisted ->
-    # references_undeclared; uncited entry -> references_uncited; all hard errors.
     references_optional: false
     references_max: null
     max_citations_per_sentence: 3
     length_unit: chars
     length_limit: null
     length_limit_request_field: limit    # per-request Request.limit (NFKC chars)
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, citation_count, length]
+    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_missing, references_undeclared, metadata_recommended, citation_count, length]
 
   ragtime26:                             # from RAGTIME 2026 guidelines
     track: ragtime26

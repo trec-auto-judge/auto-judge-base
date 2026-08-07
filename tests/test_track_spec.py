@@ -168,23 +168,42 @@ def test_check_empty_answer_messages_use_sentences_key():
     assert err == [] and warn == ["ragtime25: empty responses given (all sentences blank)"]
 
 
-def test_check_ragtime_references_required_complete_exact():
-    # references key is REQUIRED (the official validator rejects its absence) and must
-    # be exactly the cited set: absent and incomplete are both hard errors.
-    md = ReportMetaData(team_id="T", topic_id="300", run_id="run", task="multilingual")
+def test_ragtime26_references_required_complete_exact():
+    # ragtime26 (our submission year): references key is REQUIRED (the official
+    # validator rejects its absence) and must be exactly the cited set -- absent and
+    # incomplete are both hard errors.
+    md = ReportMetaData(team_id="T", topic_id="300", run_id="run", run_desc="d")
     cited = [RagtimeReportSentence(text="Sentence.", citations={UUID: 1.0})]
-    absent = check(Report(metadata=md, responses=cited, references=None), SPECS["ragtime25"])
+    absent = check(Report(metadata=md, responses=cited, references=None), SPECS["ragtime26"])
     assert any("requires a references array" in e for e in absent)
-    empty = check(Report(metadata=md, responses=cited, references=[]), SPECS["ragtime25"])
+    empty = check(Report(metadata=md, responses=cited, references=[]), SPECS["ragtime26"])
     assert any("not listed in references" in e for e in empty)   # incomplete -> hard
     exact = Report(metadata=md, responses=cited, references=[UUID])
-    assert check(exact, SPECS["ragtime25"]) == []
+    assert check(exact, SPECS["ragtime26"]) == []
     # ...and a wrong reference is wrong in BOTH directions, each a hard error: the
     # entry is uncited AND the cited doc is unlisted (complete-and-exact contract).
     mismatch = Report(metadata=md, responses=cited, references=[UUID2])
-    err, _warn = findings(mismatch, SPECS["ragtime25"])
+    err, _warn = findings(mismatch, SPECS["ragtime26"])
     assert any("never cited" in e for e in err)                # references_uncited
     assert any("not listed in references" in e for e in err)   # references_undeclared
+
+
+def test_ragtime25_relaxed_references_and_task():
+    # ragtime25 checks runs NIST already accepted: absent/incomplete references and a
+    # missing task only WARN; an uncited reference entry stays a hard error.
+    md = ReportMetaData(team_id="T", topic_id="300", run_id="run")   # no task
+    cited = [RagtimeReportSentence(text="Sentence.", citations={UUID: 1.0})]
+    err, warn = findings(Report(metadata=md, responses=cited, references=None),
+                         SPECS["ragtime25"])
+    assert err == []
+    assert any("requires a references array" in w for w in warn)
+    assert any("task" in w and "recommended" in w for w in warn)
+    err, warn = findings(Report(metadata=md, responses=cited, references=[]),
+                         SPECS["ragtime25"])
+    assert err == [] and any("not listed in references" in w for w in warn)
+    err, _warn = findings(Report(metadata=md, responses=cited, references=[UUID, UUID2]),
+                          SPECS["ragtime25"])
+    assert any("never cited" in e for e in err)   # uncited entry stays hard
 
 
 def test_check_ragtime_length_from_request():
@@ -487,10 +506,13 @@ def test_rag25_requires_type():
 
 # --- ragtime25: mandatory 'task', cited_only union ------------------------------
 
-def test_ragtime25_requires_task():
+def test_ragtime25_task_recommended_not_required():
+    # 835 accepted 2025 runs lack metadata.task -> recommended, its absence only warns
     r = ragtime_report()
     r.metadata.task = None
-    assert any("metadata.task" in e for e in r.check(SPECS["ragtime25"]))
+    err, warn = findings(r, SPECS["ragtime25"])
+    assert not any("metadata.task" in e for e in err)
+    assert any("metadata.task" in w for w in warn)
 
 
 def test_ragtime25_uncited_reference_is_a_hard_error():
