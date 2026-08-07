@@ -80,11 +80,13 @@ def test_cli_check_reports_violations(tmp_path: Path):
 
 
 def test_cli_check_collates_across_topics(tmp_path: Path):
-    # three ragtime reports all missing `task` -> one grouped line, not three
+    # three ragtime reports with an uncited reference -> one grouped PROBLEM line,
+    # not three (uncited entries are the hard error ragtime keeps in both years)
     uuid = "b6a21af8-9cc4-462d-9c70-00bb9f009401_56341480"
+    uuid2 = "042ce256-aaa2-4944-8725-7deb68b8b43f_125182681"
     lines = [json.dumps({
-        "metadata": {"team_id": "t", "topic_id": str(i), "run_id": "r"},  # no 'task'
-        "references": [uuid],
+        "metadata": {"team_id": "t", "topic_id": str(i), "run_id": "r", "task": "english"},
+        "references": [uuid, uuid2],                       # uuid2 never cited
         "responses": [{"text": "s.", "citations": {uuid: 1.0}}],
     }) for i in (1, 2, 3)]
     p = tmp_path / "runs.jsonl"
@@ -92,9 +94,24 @@ def test_cli_check_collates_across_topics(tmp_path: Path):
     result = CliRunner().invoke(main, ["check", str(p), "--spec", "ragtime25"])
     assert result.exit_code == 255
     assert result.output.count("PROBLEM (") == 1     # collated to a single issue
-    assert "metadata.task" in result.output          # the example message
+    assert "never cited" in result.output            # the example message
     assert "team=t run=r" in result.output           # offending run identified
     assert "1-3" in result.output                    # its topics, compressed
+
+
+def test_cli_check_missing_task_is_smell_only(tmp_path: Path):
+    # ragtime25 relaxation: absent metadata.task warns (metadata_recommended), exit 0
+    uuid = "b6a21af8-9cc4-462d-9c70-00bb9f009401_56341480"
+    p = tmp_path / "runs.jsonl"
+    p.write_text(json.dumps({
+        "metadata": {"team_id": "t", "topic_id": "1", "run_id": "r"},   # no 'task'
+        "references": [uuid],
+        "responses": [{"text": "s.", "citations": {uuid: 1.0}}],
+    }) + "\n", encoding="utf-8")
+    result = CliRunner().invoke(main, ["check", str(p), "--spec", "ragtime25"])
+    assert result.exit_code == 0
+    assert "PROBLEM (" not in result.output
+    assert "SMELL (" in result.output and "metadata.task" in result.output
 
 
 def test_cli_check_directory_names_offender_path_team_run(tmp_path: Path):
