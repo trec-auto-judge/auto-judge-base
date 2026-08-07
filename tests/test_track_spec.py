@@ -168,24 +168,15 @@ def test_check_empty_answer_messages_use_sentences_key():
     assert err == [] and warn == ["ragtime25: empty responses given (all sentences blank)"]
 
 
-def test_ragtime26_references_required_complete_exact():
-    # ragtime26 (our submission year): references key is REQUIRED (the official
-    # validator rejects its absence) and must be exactly the cited set -- absent and
-    # incomplete are both hard errors.
+def test_ragtime26_references_never_checked():
+    # ragtime26 organizer decision (2026-08-07): NO checks on the references field
+    # whatsoever. Absent, empty, and mismatched references all pass without a single
+    # finding. (Cited doc-ids and the per-sentence citation cap are still checked.)
     md = ReportMetaData(team_id="T", topic_id="300", run_id="run", run_desc="d")
     cited = [RagtimeReportSentence(text="Sentence.", citations={UUID: 1.0})]
-    absent = check(Report(metadata=md, responses=cited, references=None), SPECS["ragtime26"])
-    assert any("requires a references array" in e for e in absent)
-    empty = check(Report(metadata=md, responses=cited, references=[]), SPECS["ragtime26"])
-    assert any("not listed in references" in e for e in empty)   # incomplete -> hard
-    exact = Report(metadata=md, responses=cited, references=[UUID])
-    assert check(exact, SPECS["ragtime26"]) == []
-    # ...and a wrong reference is wrong in BOTH directions, each a hard error: the
-    # entry is uncited AND the cited doc is unlisted (complete-and-exact contract).
-    mismatch = Report(metadata=md, responses=cited, references=[UUID2])
-    err, _warn = findings(mismatch, SPECS["ragtime26"])
-    assert any("never cited" in e for e in err)                # references_uncited
-    assert any("not listed in references" in e for e in err)   # references_undeclared
+    for refs in (None, [], [UUID], [UUID2], [UUID, UUID2]):
+        assert check(Report(metadata=md, responses=cited, references=refs),
+                     SPECS["ragtime26"]) == []
 
 
 def test_ragtime25_relaxed_references_and_task():
@@ -453,16 +444,6 @@ def test_rag25_retrieval_list_uncited_references_are_a_smell():
     err, warn = findings(r, SPECS["rag25"])
     assert err == [] and any("never cited" in w for w in warn)
     assert r.verify(SPECS["rag25"]) is True
-
-
-def test_ragtime26_uncited_reference_is_a_hard_error():
-    # ragtime26: references, when given, must be exactly the union of cited docs
-    md = ReportMetaData(team_id="T", topic_id="300", run_id="run", run_desc="d")
-    r = Report(metadata=md,
-               responses=[RagtimeReportSentence(text="s.", citations={UUID: 1.0})],
-               references=[UUID, UUID2])
-    err, _warn = findings(r, SPECS["ragtime26"])
-    assert any("never cited" in e for e in err)
 
 
 def test_ragtime26_missing_run_desc_is_a_smell():

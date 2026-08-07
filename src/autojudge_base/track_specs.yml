@@ -48,7 +48,7 @@ specs:
     forbid_extra_metadata: false         # rag-task.md: metadata "may also contain any
                                          # additional participant-defined fields"
     require_exact_narrative: true
-    run_id_max_len: null                 # no run_id length constraint in the spec
+    run_id_max_len: 20                 #  # " A-Z, a-z, 0-9, -, _, or ., but cannot begin with a period."
     docid_pattern: 'shard_\d+_\d+'        # ClimbMix, e.g. shard_00459_61697
     collection_ids: [climbmix-400b]      # informational; forbidden as a metadata key
     references_kind: retrieval_list      # rag-task.md: references is REQUIRED and MAY include uncited docs ("Uncited entries do not hurt the score"), but every CITED doc (by integer index OR doc-id string) must match an entry in references. Empty [] is valid only when nothing is cited (empty cited-set is trivially a subset).
@@ -151,22 +151,22 @@ specs:
     recommended_metadata: [run_desc]
     forbid_extra_metadata: false
     require_exact_narrative: false
-    run_id_max_len: 25                   # "An arbitrary string ... Maximum of 25 characters"
+    run_id_max_len: 20                   # " A-Z, a-z, 0-9, -, _, or ., but cannot begin with a period."
     docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'
     collection_ids: [ragtime/2/all,ragtime/2/eng]
-    references_kind: cited_only
-    # references key is REQUIRED (the official validator's schema rejects its absence)
-    # and must be COMPLETE AND EXACT -- exactly the set of cited documents
-    # (Laura, 2026-08-07). Absent -> references_missing; cited-but-unlisted ->
-    # references_undeclared; uncited entry -> references_uncited; all hard errors.
-    # length stays a smell: overlength is truncated before scoring, not rejected.
-    references_optional: false
+    # Organizer decision (2026-08-07, via Laura): NO checks on the references field
+    # whatsoever -- absent, empty, or mismatched all pass. Supersedes the earlier
+    # REQUIRED-and-exact reading. Cited doc-ids are still pattern-checked, and the
+    # 3-citations-per-sentence cap stays as a SMELL.
+    references_kind: ignore
+    references_optional: true
     references_max: null
     max_citations_per_sentence: 3
+    # length stays a smell: overlength is truncated before scoring, not rejected.
     length_unit: chars
     length_limit: null
     length_limit_request_field: limit
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, citation_count, metadata_recommended, length]
+    smells: [empty_answer, blank_sentence, duplicate_topics, citation_count, metadata_recommended, length]
 
   dragun25:                              # from DRAGUN 2025 guidelines (Task 2: Report Generation)
     track: dragun25

@@ -679,8 +679,10 @@ def remove_unavailable_citations(report: Report, unavailable_doc_ids: Set[str]) 
 
 def load_report(reports_path:Path)->List[Report]:
     reports = list()
-    with open(file=reports_path) as f:
-        for line in f.readlines():
+    with open(file=reports_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue    # tolerate blank/trailing lines in submission files
             data = json.load(fp=StringIO(line))
             report = Report.model_validate(data)
             report.path = reports_path.absolute()
