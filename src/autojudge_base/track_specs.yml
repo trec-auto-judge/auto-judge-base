@@ -12,6 +12,8 @@
 #   sentences_key       - top-level key holding the sentence list on the wire (answer/responses)
 #   topic_id_field      - metadata key carrying the topic id (narrative_id/topic_id)
 #   mandatory_metadata  - keys that must be present and non-empty. id fields may be str OR int.
+#   recommended_metadata - keys the track names but whose absence is only advisory; an
+#                         absent/empty one reports category metadata_recommended.
 #   forbid_extra_metadata   - if true, allowed keys equal mandatory_metadata exactly (no extras)
 #   require_exact_narrative - if true, metadata.narrative must exactly copy the topic text
 #                         (a report-by-topics cross-check; RAG only)
@@ -28,8 +30,8 @@
 #                         blank_sentence, citation_format, citation_count, reference_index,
 #                         citation_score, docid_pattern, references_present, references_missing,
 #                         references_duplicate, references_undeclared, references_uncited,
-#                         references_max, metadata, run_id_length, length, duplicate_topics,
-#                         missing_topics, new_topics, narrative.
+#                         references_max, metadata, metadata_recommended, run_id_length,
+#                         length, duplicate_topics, missing_topics, new_topics, narrative.
 #   length              - length_limit (fixed) XOR length_limit_request_field (Request field).
 #                         Unit picks the counter: words = worst-case NFKC/split, chars = NFKC chars.
 #   docid_pattern       - regex the citation/reference doc-ids must match (null = skip)
@@ -43,7 +45,8 @@ specs:
     sentences_key: answer
     topic_id_field: narrative_id
     mandatory_metadata: [team_id, narrative_id, narrative, run_id, run_desc]
-    forbid_extra_metadata: true          # do not add extra keys to the metadata object
+    forbid_extra_metadata: false         # rag-task.md: metadata "may also contain any
+                                         # additional participant-defined fields"
     require_exact_narrative: true
     run_id_max_len: null                 # no run_id length constraint in the spec
     docid_pattern: 'shard_\d+_\d+'        # ClimbMix, e.g. shard_00459_61697
@@ -58,9 +61,12 @@ specs:
     # sum(len(item["text"].split())) <= 1024) -> NOT a smell.
     # Duplicate references are contract-silent (rag-task.md neither prohibits nor
     # allows them) -> kept as a smell (warn, do not fail).
-    # citation_count is a smell (#4): over-limit sentences are accepted but left
-    # unjudged, so the submitter is warned rather than blocked.
-    smells: [empty_answer, references_duplicate, references_uncited, citation_count]
+    # citation_count is a smell (#4; organizers confirmed 2026-08-07: they judge only
+    # the first three citations but accept more).
+    # references_uncited: a retrieval list MAY carry uncited docs, but organizers
+    # suggest not to -> smell. missing_topics: organizers accept answer=[] and also a
+    # fully absent topic entry -> smell (duplicate topics stay a hard error).
+    smells: [empty_answer, references_duplicate, references_uncited, citation_count, missing_topics]
 
   rag25:                                 # CONFIRMED against TREC RAG 2025 track guidelines
     track: rag25
@@ -76,11 +82,13 @@ specs:
     collection_ids: [msmarco_v2.1_doc_segmented]
     references_kind: retrieval_list      # references = top-k retrieval list (cited is a subset)
     references_max: 100
-    max_citations_per_sentence: null     # not specified
+    max_citations_per_sentence: null     # no per-sentence cap in the 2025 guidelines
     length_unit: words
     length_limit: 400
     length_limit_request_field: null
-    smells: [empty_answer, references_duplicate,references_uncited]
+    # length: "less than 400 words" with no rejection language, and this spec mostly
+    # checks participant runs the organizers already accepted -> smell.
+    smells: [empty_answer, references_duplicate, references_uncited, length]
 
   rag25-autojudge:                       # auto-judge round-trip of rag25 runs (relaxed rag25)
     track: rag25-autojudge
@@ -96,7 +104,7 @@ specs:
     collection_ids: [msmarco_v2.1_doc_segmented]
     references_kind: ignore              # references array is not enforced (no cited-set / 100-cap check)
     references_max: null
-    max_citations_per_sentence: null
+    max_citations_per_sentence: null     # cap-free, like rag25
     length_unit: words
     length_limit: 400
     length_limit_request_field: null
@@ -113,18 +121,19 @@ specs:
     mandatory_metadata: [team_id, topic_id, run_id, task]   # task present; value cosmetic (multilingual or english)
     forbid_extra_metadata: false
     require_exact_narrative: false       # no narrative field in output
-    run_id_max_len: null
+    run_id_max_len: 25                   # per the ragtime26 guideline; assumed same in 2025
     docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'  # NeuCLIR uuid_segment
     collection_ids: [ragtime/1/all, ragtime/1/eng]
     references_kind: cited_only
     references_optional: true            # references may be omitted/empty; if given they must match cited
     references_max: null
-    max_citations_per_sentence: null
+    max_citations_per_sentence: 3
     length_unit: chars
     length_limit: null
     length_limit_request_field: limit    # per-request Request.limit (NFKC chars)
-    # cited-set mismatches are advisory for RAGTIME (references are optional metadata)
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_undeclared, references_uncited, length]
+    # references_undeclared stays advisory, but an UNCITED reference entry is a hard
+    # error: ragtime does not allow uncited references (Laura, 2026-08-07).
+    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_undeclared, citation_count, length]
 
   ragtime26:                             # from RAGTIME 2026 guidelines
     track: ragtime26
@@ -132,20 +141,26 @@ specs:
     sentence_type: [ragtime, neuclir]    # doc_id:score dict OR plain doc-id list. Emit ragtime.
     sentences_key: responses
     topic_id_field: topic_id
-    mandatory_metadata: [team_id, topic_id, run_id]   # task dropped, run_desc added
+    mandatory_metadata: [team_id, topic_id, run_id]   # task dropped
+    # run_desc is in the guideline's metadata block but with no guidance on content
+    # (Laura, 2026-08-07) -> absent run_desc is only a smell (metadata_recommended).
+    recommended_metadata: [run_desc]
     forbid_extra_metadata: false
     require_exact_narrative: false
-    run_id_max_len: 
+    run_id_max_len: 25                   # "An arbitrary string ... Maximum of 25 characters"
     docid_pattern: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d+'
-    collection_ids: [ragtime/2/all]
+    collection_ids: [ragtime/2/all,ragtime/2/eng]
     references_kind: cited_only
-    references_optional: true            # references may be omitted/empty; if given they must match cited
-    references_max: null
-    max_citations_per_sentence: null
+    references_optional: true            # references may be omitted entirely, OR list
+    references_max: null                 #   exactly the cited documents
+    max_citations_per_sentence: 3
     length_unit: chars
     length_limit: null
     length_limit_request_field: limit
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_undeclared, references_uncited, length]
+    # references_uncited is deliberately NOT a smell: "references ... should be the
+    # union of all cited documents" -- an uncited entry is a hard error. length stays
+    # a smell: overlength is truncated before scoring, not rejected.
+    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_undeclared, citation_count, metadata_recommended, length]
 
   dragun25:                              # from DRAGUN 2025 guidelines (Task 2: Report Generation)
     track: dragun25

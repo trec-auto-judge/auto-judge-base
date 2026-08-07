@@ -174,14 +174,13 @@ def test_check_ragtime_references_optional():
     cited = [RagtimeReportSentence(text="Sentence.", citations={UUID: 1.0})]
     assert check(Report(metadata=md, responses=cited, references=[]), SPECS["ragtime25"]) == []
     assert check(Report(metadata=md, responses=cited, references=None), SPECS["ragtime25"]) == []
-    # ...a NON-empty references array is checked against the cited set, but for RAGTIME
-    # the mismatches are SMELLS (warnings), not hard errors.
+    # ...a NON-empty references array is checked against the cited set: an UNCITED
+    # entry is a hard error (ragtime does not allow uncited references), while a
+    # cited-but-unlisted doc is only a smell.
     mismatch = Report(metadata=md, responses=cited, references=[UUID2])
     err, warn = findings(mismatch, SPECS["ragtime25"])
-    assert err == []                              # not a failure for ragtime25
-    joined = " ".join(warn)
-    assert "not listed in references" in joined   # UUID cited but not listed (references_undeclared)
-    assert "never cited" in joined                # UUID2 listed but never cited (references_uncited)
+    assert any("never cited" in e for e in err)              # references_uncited -> hard
+    assert any("not listed in references" in w for w in warn)  # references_undeclared -> smell
 
 
 def test_check_ragtime_length_from_request():
@@ -272,10 +271,13 @@ def test_rag26_neuclir_now_accepted():
     assert r.verify(SPECS["rag26"]) is True
 
 
-def test_rag26_references_must_equal_cited():
+def test_rag26_uncited_reference_is_a_smell():
+    # rag-task.md: "Uncited entries do not hurt the score" -- the retrieval list may
+    # carry them; the organizers suggest not to, so it warns without failing.
     r = rag26_report(refs=[SHARD, SHARD2, SHARD3])  # SHARD3 never cited
-    with pytest.raises(RuntimeError, match="cited"):
-        r.verify(SPECS["rag26"])
+    err, warn = findings(r, SPECS["rag26"])
+    assert err == [] and any("never cited" in w for w in warn)
+    assert r.verify(SPECS["rag26"]) is True
 
 
 def test_ragtime26_valid_and_length_from_request():
@@ -421,17 +423,56 @@ def test_wrong_collection_docids_fail_each_spec(track):
 
 # --- rag25: retrieval_list references, 400 words, mandatory 'type' ---------------
 
-def test_rag25_retrieval_list_allows_uncited_references():
-    # unlike cited_only, the retrieval list MAY contain uncited docs (cited is a subset)
+def test_rag25_retrieval_list_uncited_references_are_a_smell():
+    # the retrieval list MAY contain uncited docs, but the organizers suggest not to:
+    # verify still passes, and the uncited entry is surfaced as a warning
     r = rag25_report([Rag24ReportSentence(text="s.", citations=[0])], [MSM, MSM2])
+    err, warn = findings(r, SPECS["rag25"])
+    assert err == [] and any("never cited" in w for w in warn)
     assert r.verify(SPECS["rag25"]) is True
 
 
-def test_rag25_word_limit():
+def test_ragtime26_uncited_reference_is_a_hard_error():
+    # ragtime26: references, when given, must be exactly the union of cited docs
+    md = ReportMetaData(team_id="T", topic_id="300", run_id="run", run_desc="d")
+    r = Report(metadata=md,
+               responses=[RagtimeReportSentence(text="s.", citations={UUID: 1.0})],
+               references=[UUID, UUID2])
+    err, _warn = findings(r, SPECS["ragtime26"])
+    assert any("never cited" in e for e in err)
+
+
+def test_ragtime26_missing_run_desc_is_a_smell():
+    md = ReportMetaData(team_id="T", topic_id="300", run_id="run")
+    r = Report(metadata=md,
+               responses=[RagtimeReportSentence(text="s.", citations={UUID: 1.0})],
+               references=[UUID])
+    err, warn = findings(r, SPECS["ragtime26"])
+    assert err == [] and any("run_desc" in w and "recommended" in w for w in warn)
+
+
+def test_ragtime26_run_id_over_25_chars_rejected():
+    md = ReportMetaData(team_id="T", topic_id="300", run_id="x" * 26, run_desc="d")
+    r = Report(metadata=md,
+               responses=[RagtimeReportSentence(text="s.", citations={UUID: 1.0})],
+               references=[UUID])
+    err, _warn = findings(r, SPECS["ragtime26"])
+    assert any("25-character limit" in e for e in err)
+
+
+def test_rag26_extra_metadata_fields_tolerated():
+    # rag-task.md: metadata "may also contain any additional participant-defined fields"
+    assert SPECS["rag26"].forbid_extra_metadata is False
+
+
+def test_rag25_word_limit_is_a_smell():
+    # "less than 400 words" carries no rejection language, and this spec mostly checks
+    # participant runs the organizers already accepted -> warn, don't fail.
     over = SPECS["rag25"].length_limit + 10  # derive from the spec, don't hardcode 400
     long = rag25_report([Rag24ReportSentence(text="word " * over, citations=[0])], [MSM])
-    with pytest.raises(RuntimeError, match="words"):
-        long.verify(SPECS["rag25"])
+    err, warn = findings(long, SPECS["rag25"])
+    assert err == [] and any("words" in w for w in warn)
+    assert long.verify(SPECS["rag25"]) is True
 
 
 def test_rag25_requires_type():
@@ -448,13 +489,14 @@ def test_ragtime25_requires_task():
     assert any("metadata.task" in e for e in r.check(SPECS["ragtime25"]))
 
 
-def test_ragtime25_references_cited_set_is_a_smell():
-    # for RAGTIME the references/cited-set mismatch is advisory (a SMELL), not a failure
+def test_ragtime25_uncited_reference_is_a_hard_error():
+    # ragtime does not allow uncited references: an entry cited by no sentence fails
     r = ragtime_report()
     r.references = [UUID, UUID2, UUID3]  # UUID3 present but never cited
-    err, warn = findings(r, SPECS["ragtime25"])
-    assert err == [] and any("never cited" in w for w in warn)
-    assert r.verify(SPECS["ragtime25"]) is True
+    err, _warn = findings(r, SPECS["ragtime25"])
+    assert any("never cited" in e for e in err)
+    with pytest.raises(RuntimeError, match="never cited"):
+        r.verify(SPECS["ragtime25"])
 
 
 def test_ragtime_length_is_chars_from_request():
@@ -473,19 +515,26 @@ def test_ragtime_length_is_chars_from_request():
 
 # --- ragtime26: run_id <= 25, mandatory run_desc --------------------------------
 
-def test_no_run_id_length_constraint():
-    # No track currently constrains run_id length (the machinery is spec-driven via
-    # run_id_max_len, but all specs set it null pending organizer confirmation).
-    assert all(s.run_id_max_len is None for s in SPECS.values())
+def test_run_id_length_constraint_per_spec():
+    # RAGTIME caps run_id at 25 chars ("Maximum of 25 characters"); the RAG family
+    # states no constraint.
+    assert SPECS["ragtime25"].run_id_max_len == 25
+    assert SPECS["ragtime26"].run_id_max_len == 25
+    assert SPECS["rag26"].run_id_max_len is None
     r = ragtime_report()
     r.metadata.run_id = "x" * 100
-    assert r.verify(SPECS["ragtime26"]) is True
+    with pytest.raises(RuntimeError, match="25-character limit"):
+        r.verify(SPECS["ragtime26"])
 
 
-def test_ragtime26_requires_run_desc():
+def test_ragtime26_run_desc_recommended_not_required():
+    # the guideline names run_desc but gives no guidance on its content -> its absence
+    # is a metadata_recommended smell, never a hard error
     r = ragtime_report()
     r.metadata.run_desc = None
-    assert any("metadata.run_desc" in e for e in r.check(SPECS["ragtime26"]))
+    err, warn = findings(r, SPECS["ragtime26"])
+    assert not any("run_desc" in e for e in err)
+    assert any("run_desc" in w for w in warn)
 
 
 # --- dragun25: neuclir docids, no references, mandatory type/use_starter_kit -----

@@ -43,11 +43,11 @@ def test_spec_compliant_clean():
 
 
 def test_spec_compliant_errors_and_smells():
-    err = _rag26_report(refs=[SHARD, SHARD2],
-                        sents=[Rag24ReportSentence(text="Only.", citations=[0])])  # SHARD2 uncited
+    err = _rag26_report(refs=["not_a_shard_id"],
+                        sents=[Rag24ReportSentence(text="Only.", citations=[0])])  # bad docid -> hard
     smell = _rag26_report(topic="2", refs=[], sents=[])                            # empty answer
     v = ReportVerification([err, smell], "rag26").spec_compliant()
-    assert any("never cited" in f.message for f in v.errors)
+    assert any("docid" in f.message for f in v.errors)
     assert any("empty answer" in f.message for f in v.warnings)
     assert v.ok == 1                          # only the empty (smell-only) report has no hard error
 
@@ -79,9 +79,9 @@ def test_coverage_missing_new_dup():
     requests = {t: SimpleNamespace(request_id=t, title="q text") for t in ("1", "2", "3")}
     v = ReportVerification(reports, "rag26", requests=requests).coverage()
     by_cat = {f.category: f.severity for f in v.findings}
-    assert by_cat["missing_topics"] == "error"        # topic 3 missing
+    assert by_cat["missing_topics"] == "warning"      # rag26: absent topics accepted -> smell
     assert by_cat["new_topics"] == "error"            # topic 9 extra
-    assert by_cat["duplicate_topics"] == "warning"    # dup is a smell by default
+    assert by_cat["duplicate_topics"] == "error"      # exactly one report per narrative
 
 
 def test_coverage_all_present_no_findings():
@@ -94,9 +94,9 @@ def test_coverage_all_present_no_findings():
 # --- fluent all() + fail-fast raise_first() -------------------------------------
 
 def test_all_then_raise_first_raises_on_error():
-    err = _rag26_report(refs=[SHARD, SHARD2],
+    err = _rag26_report(refs=["not_a_shard_id"],
                         sents=[Rag24ReportSentence(text="Only.", citations=[0])])
-    with pytest.raises(ReportVerificationError, match="never cited"):
+    with pytest.raises(ReportVerificationError, match="docid"):
         ReportVerification([err], "rag26").all().raise_first()
 
 

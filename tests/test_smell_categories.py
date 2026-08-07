@@ -62,7 +62,7 @@ CASES = {
     "citation_count": (replace(RAG26, max_citations_per_sentence=1), _rag26(
         sents=[Rag24ReportSentence(text="x.", citations=[0, 0])])),
     "reference_index": (RAG26, _rag26(
-        sents=[Rag24ReportSentence(text="x.", citations=[7])])),
+        sents=[Rag24ReportSentence(text="x.", citations=[0, 7])])),
     "citation_score": (RAGTIME, _ragtime(
         [RagtimeReportSentence.model_construct(text="x.", citations={UUID: "high"})],
         [UUID])),
@@ -83,8 +83,14 @@ CASES = {
     "references_uncited": (RAGTIME, _ragtime(
         [RagtimeReportSentence(text="x.", citations={UUID: 1.0})], [UUID, UUID2])),
     "references_max": (replace(RAG26, references_max=1), _rag26(
-        sents=[Rag24ReportSentence(text="x.", citations=[0])], refs=[SHARD, SHARD2])),
+        sents=[Rag24ReportSentence(text="x.", citations=[0]),
+               Rag24ReportSentence(text="y.", citations=[1])],
+        refs=[SHARD, SHARD2])),
     "metadata": (RAG26, _rag26(team_id="")),
+    "metadata_recommended": (replace(RAGTIME, recommended_metadata=("run_desc",)),
+                             _ragtime([RagtimeReportSentence(text="x.",
+                                                             citations={UUID: 1.0})],
+                                      [UUID])),
     "run_id_length": (replace(RAG26, run_id_max_len=2), _rag26()),
     "length": (replace(RAG26, length_limit=1), _rag26(
         sents=[Rag24ReportSentence(text="five words are too many.", citations=[0])])),

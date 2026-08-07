@@ -75,6 +75,7 @@ class TrackSpec:
     sentences_key: str                        # "answer" | "responses"
     topic_id_field: str                       # "narrative_id" | "topic_id"
     mandatory_metadata: Tuple[str, ...]
+    recommended_metadata: Tuple[str, ...] = ()   # absent -> metadata_recommended finding
     forbid_extra_metadata: bool = False
     require_exact_narrative: bool = False
     run_id_max_len: Optional[int] = None
@@ -102,6 +103,7 @@ class TrackSpec:
             sentences_key=d["sentences_key"],
             topic_id_field=d["topic_id_field"],
             mandatory_metadata=tuple(d["mandatory_metadata"]),
+            recommended_metadata=tuple(d.get("recommended_metadata") or ()),
             forbid_extra_metadata=bool(d.get("forbid_extra_metadata", False)),
             require_exact_narrative=bool(d.get("require_exact_narrative", False)),
             run_id_max_len=d.get("run_id_max_len"),

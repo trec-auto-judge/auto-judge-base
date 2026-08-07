@@ -409,7 +409,7 @@ def _map_metadata(src: "ReportMetaData", spec) -> "ReportMetaData":
         "run_id": src.run_id,
         spec.topic_id_field: src.topic_id,  # canonical id (topic_id/narrative_id synced)
     }
-    for key in spec.mandatory_metadata:
+    for key in (*spec.mandatory_metadata, *spec.recommended_metadata):
         if key in fields:
             continue
         fields[key] = src.narrative if key == "narrative" else getattr(src, key, None)
@@ -511,7 +511,8 @@ def submission_dict(report: Report, spec) -> Dict[str, Any]:
     md = report.metadata
     metadata = {
         key: (str(getattr(md, key)) if key == spec.topic_id_field else getattr(md, key))
-        for key in spec.mandatory_metadata
+        for key in (*spec.mandatory_metadata, *spec.recommended_metadata)
+        if getattr(md, key, None) is not None or key in spec.mandatory_metadata
     }
     obj: Dict[str, Any] = {"metadata": metadata}
     if spec.references_kind != "none":

@@ -28,6 +28,7 @@ Category <-> spec-key map (which track_specs.yml key configures each check):
   references_present/missing/
     duplicate/undeclared/uncited/max  references_kind, references_optional, references_max
   metadata, run_id_length             mandatory_metadata, run_id_max_len
+  metadata_recommended                recommended_metadata (absent field, advisory)
   length                              length_unit + length_limit XOR length_limit_request_field
   duplicate_topics, missing_topics,   cross-report checks in report_verification.py
     new_topics, narrative             (require_exact_narrative for the last)
@@ -68,6 +69,7 @@ CAT_REF_UNDECLARED = "references_undeclared"  # a cited doc-id is not listed in 
 CAT_REF_UNCITED = "references_uncited"       # a references doc-id is never cited in the answer
 CAT_REF_MAX = "references_max"               # references array longer than the allowed max
 CAT_METADATA = "metadata"               # a mandatory metadata field is missing/empty
+CAT_METADATA_RECOMMENDED = "metadata_recommended"  # a recommended metadata field is absent
 CAT_RUN_ID = "run_id_length"            # run_id too long
 CAT_LENGTH = "length"                   # answer text over the length limit
 CAT_STRUCTURAL = "structural"           # spec=None fallback checks
@@ -112,6 +114,11 @@ def _check_metadata(report: "Report", spec: TrackSpec, add: AddFn) -> None:
         if val is None or (isinstance(val, str) and not val.strip()):
             add(CAT_METADATA,
                 f"{spec.track}: metadata.{key} is a required field but is missing or empty (got {val!r})")
+    for key in spec.recommended_metadata:
+        val = getattr(md, key, None)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            add(CAT_METADATA_RECOMMENDED,
+                f"{spec.track}: metadata.{key} is recommended by the track but is missing or empty")
     if spec.run_id_max_len is not None:
         rid = md.run_id or ""
         if len(rid) > spec.run_id_max_len:
@@ -213,6 +220,13 @@ def _check_references(report: "Report", spec: TrackSpec, sentences, add: AddFn) 
         if spec.references_max is not None and len(refs) > spec.references_max:
             add(CAT_REF_MAX,
                 f"{spec.track}: the references array has {len(refs)} entries (max {spec.references_max})")
+        # A retrieval list MAY carry uncited docs, but the RAG organizers suggest not
+        # to (Laura, 2026-08-07) -- reported so specs can surface it as a smell.
+        uncited = sorted(set(refs) - cited)
+        if uncited:
+            add(CAT_REF_UNCITED,
+                f"{spec.track}: {len(uncited)} document(s) in references are never cited in the "
+                f"answer (e.g. {uncited[0]!r}); permitted, but citing or dropping them is preferred")
 
 
 def _check_length(report: "Report", spec: TrackSpec, sentences, request, add: AddFn) -> None:
