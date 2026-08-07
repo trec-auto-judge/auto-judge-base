@@ -229,10 +229,14 @@ def test_rag26_valid():
     assert rag26_report().verify(SPECS["rag26"]) is True
 
 
-def test_rag26_too_many_citations():
+def test_rag26_too_many_citations_is_a_smell():
+    # citation_count is a SMELL for rag26 (#4): over-limit sentences are accepted by
+    # the organizers but left unjudged, so verify passes and the finding is a warning.
     bad = [Rag24ReportSentence(text="x", citations=[0, 1, 0, 1])]
-    with pytest.raises(RuntimeError, match="citations"):
-        rag26_report(sents=bad).verify(SPECS["rag26"])
+    r = rag26_report(sents=bad)
+    err, warn = findings(r, SPECS["rag26"])
+    assert err == [] and any("citations" in w for w in warn)
+    assert r.verify(SPECS["rag26"]) is True
 
 
 def test_rag26_bad_docid_pattern():
@@ -325,10 +329,13 @@ def test_dragun_present_references_is_a_smell():
     assert r.verify(SPECS["dragun25"]) is True
 
 
-def test_dragun_too_many_citations():
+def test_dragun_too_many_citations_is_a_smell():
+    # citation_count is a SMELL for dragun25 (#4), like rag26.
     bad = [NeuclirReportSentence(text="x", citations=[MSM, MSM2, MSM, MSM2])]
-    with pytest.raises(RuntimeError, match="citations"):
-        dragun_report(sents=bad).verify(SPECS["dragun25"])
+    r = dragun_report(sents=bad)
+    err, warn = findings(r, SPECS["dragun25"])
+    assert err == [] and any("citations" in w for w in warn)
+    assert r.verify(SPECS["dragun25"]) is True
 
 
 def test_rag25_accepts_both_formats():

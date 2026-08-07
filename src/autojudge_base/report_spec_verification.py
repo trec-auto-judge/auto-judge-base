@@ -17,6 +17,24 @@ Entry points:
 
 `spec` may be a `TrackSpec`, a track-id string (e.g. "rag26", resolved via SPECS), or
 None (structural-only checks). The spec is always caller-supplied -- never sniffed.
+
+Category <-> spec-key map (which track_specs.yml key configures each check):
+
+  empty_answer, blank_sentence        always checked (sentences_key selects the list)
+  citation_format                     sentence_type
+  citation_count                      max_citations_per_sentence
+  reference_index, citation_score     implied by the sentence format (rag24 / ragtime)
+  docid_pattern                       docid_pattern (+ collection_ids in the message)
+  references_present/missing/
+    duplicate/undeclared/uncited/max  references_kind, references_optional, references_max
+  metadata, run_id_length             mandatory_metadata, run_id_max_len
+  length                              length_unit + length_limit XOR length_limit_request_field
+  duplicate_topics, missing_topics,   cross-report checks in report_verification.py
+    new_topics, narrative             (require_exact_narrative for the last)
+
+Coverage contract: EVERY category above passes through tests/test_smell_categories.py
+in both directions -- fires as a hard error by default, demotes to a warning when the
+spec lists it in `smells`. A new category must be added to that matrix.
 """
 from __future__ import annotations
 

@@ -11,7 +11,7 @@ Two layers cooperate:
 - this module adds the CROSS-REPORT checks a single report cannot see -- every expected
   topic present (`complete_topics`), no unexpected topics (`no_extra_topics`), no
   duplicate topic objects (`unique_topics`), and the exact-narrative copy rule
-  (`exact_narratives`) -- exactly like Leaderboard's complete_topics / no_extra_topics.
+  (`exact_narratives`) -- exactly like Leaderboard's complete_topics / no_extra_topics ("new_topics").
 
 Findings accumulate into `self.findings`, each tagged `error` or `warning`. Whether a
 category is a warning is driven by `spec.smells` (the report analog of Leaderboard's

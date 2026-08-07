@@ -48,12 +48,19 @@ specs:
     run_id_max_len: null                 # no run_id length constraint in the spec
     docid_pattern: 'shard_\d+_\d+'        # ClimbMix, e.g. shard_00459_61697
     collection_ids: [climbmix-400b]      # informational; forbidden as a metadata key
-    references_kind: cited_only
+    references_kind: retrieval_list      # rag-task.md: references is REQUIRED and MAY include uncited docs ("Uncited entries do not hurt the score"), but every CITED doc (by integer index OR doc-id string) must match an entry in references. Empty [] is valid only when nothing is cited (empty cited-set is trivially a subset).
     references_max: null
-    max_citations_per_sentence: 3
+    max_citations_per_sentence: 3        # 0-3 citations per answer object; an empty citations array is explicitly permitted (no minimum)
     length_unit: words
     length_limit: 1024
     length_limit_request_field: null
+    # length is a HARD reject (rag-task.md: "hard rejection criterion",
+    # sum(len(item["text"].split())) <= 1024) -> NOT a smell.
+    # Duplicate references are contract-silent (rag-task.md neither prohibits nor
+    # allows them) -> kept as a smell (warn, do not fail).
+    # citation_count is a smell (#4): over-limit sentences are accepted but left
+    # unjudged, so the submitter is warned rather than blocked.
+    smells: [empty_answer, references_duplicate, references_uncited, citation_count]
 
   rag25:                                 # CONFIRMED against TREC RAG 2025 track guidelines
     track: rag25
@@ -73,6 +80,7 @@ specs:
     length_unit: words
     length_limit: 400
     length_limit_request_field: null
+    smells: [empty_answer, references_duplicate,references_uncited]
 
   rag25-autojudge:                       # auto-judge round-trip of rag25 runs (relaxed rag25)
     track: rag25-autojudge
@@ -93,7 +101,8 @@ specs:
     length_limit: 400
     length_limit_request_field: null
     # over-length is advisory for the round-trip format (organizers truncate, not reject)
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, length]
+    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_uncited, length]
+
 
   ragtime25:                             # from RAGTIME 2025 guidelines
     track: ragtime25
@@ -123,7 +132,7 @@ specs:
     sentence_type: [ragtime, neuclir]    # doc_id:score dict OR plain doc-id list. Emit ragtime.
     sentences_key: responses
     topic_id_field: topic_id
-    mandatory_metadata: [team_id, topic_id, run_id, run_desc]   # task dropped, run_desc added
+    mandatory_metadata: [team_id, topic_id, run_id]   # task dropped, run_desc added
     forbid_extra_metadata: false
     require_exact_narrative: false
     run_id_max_len: 
@@ -156,7 +165,8 @@ specs:
     length_unit: words
     length_limit: 250
     length_limit_request_field: null
-    smells: [empty_answer, blank_sentence, duplicate_topics, references_duplicate, references_present]
+    # citation_count as smell (#4): over-limit sentences are accepted but unjudged.
+    smells: [empty_answer, missing_topics, blank_sentence, duplicate_topics, references_duplicate, references_present, new_topics, citation_count]
 
   kiddie:                                # synthetic smoke-test dataset (starterkits)
     track: kiddie
