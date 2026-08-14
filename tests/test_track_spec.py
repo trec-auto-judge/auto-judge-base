@@ -455,13 +455,13 @@ def test_ragtime26_missing_run_desc_is_a_smell():
     assert err == [] and any("run_desc" in w and "recommended" in w for w in warn)
 
 
-def test_ragtime26_run_id_over_25_chars_rejected():
-    md = ReportMetaData(team_id="T", topic_id="300", run_id="x" * 26, run_desc="d")
+def test_ragtime26_run_id_over_20_chars_rejected():
+    md = ReportMetaData(team_id="T", topic_id="300", run_id="x" * 21, run_desc="d")
     r = Report(metadata=md,
                responses=[RagtimeReportSentence(text="s.", citations={UUID: 1.0})],
                references=[UUID])
     err, _warn = findings(r, SPECS["ragtime26"])
-    assert any("25-character limit" in e for e in err)
+    assert any("20-character limit" in e for e in err)
 
 
 def test_rag26_extra_metadata_fields_tolerated():
@@ -520,17 +520,17 @@ def test_ragtime_length_is_chars_from_request():
     assert r.verify(spec, request=SimpleNamespace(limit=n_chars - 1)) is True       # smell -> no raise
 
 
-# --- ragtime26: run_id <= 25, mandatory run_desc --------------------------------
+# --- ragtime26: run_id <= 20, mandatory run_desc --------------------------------
 
 def test_run_id_length_constraint_per_spec():
-    # RAGTIME caps run_id at 25 chars ("Maximum of 25 characters"); the RAG family
+    # RAGTIME caps run_id at 20 chars ("Maximum of 20 characters"); the RAG family
     # states no constraint.
     assert SPECS["ragtime25"].run_id_max_len == 25
-    assert SPECS["ragtime26"].run_id_max_len == 25
-    assert SPECS["rag26"].run_id_max_len is None
+    assert SPECS["ragtime26"].run_id_max_len == 20
+    assert SPECS["rag26"].run_id_max_len == 20
     r = ragtime_report()
     r.metadata.run_id = "x" * 100
-    with pytest.raises(RuntimeError, match="25-character limit"):
+    with pytest.raises(RuntimeError, match="20-character limit"):
         r.verify(SPECS["ragtime26"])
 
 
