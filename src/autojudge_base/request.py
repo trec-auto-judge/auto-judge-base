@@ -8,16 +8,35 @@ from pydantic import BaseModel
 
 
 class Request(BaseModel):
+    """A topic/request. `request_id` is the canonical identifier.
+
+    Topics files must supply `request_id` -- to be compatible with exisiting auto-judge implementations
+
+    `topic_id` and `narrative_id` are mirroring request_id
+    """
     request_id:str
+    title:str
     collection_ids:Optional[List[str]]= None
     background:Optional[str] = None
     original_background:Optional[str] = None
     problem_statement:Optional[str] = None
     limit:Optional[int] = None
     word_limit:Optional[int] = None
-    title:str
 
-# Todo @mam10eks:  check bug @26
+    # Mirrors of request_id, set in model_post_init (never read as input)
+    topic_id:Optional[str] = None
+    narrative_id:Optional[str] = None
+
+    def model_post_init(self, __context__: dict | None = None) -> None:
+        for name in ("topic_id", "narrative_id"):
+            given = getattr(self, name)
+            if given is not None and str(given) != str(self.request_id):
+                raise ValueError(
+                    f"Inconsistent topic identifiers: "
+                    f"request_id={self.request_id}, {name}={given}"
+                )
+            setattr(self, name, self.request_id)
+
 
 def load_requests_from_irds(ir_dataset)->List[Request]:
     ret = list()

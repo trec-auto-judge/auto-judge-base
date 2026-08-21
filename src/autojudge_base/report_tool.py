@@ -216,7 +216,7 @@ def check(reports, spec_id, topics_path, strict, suppress_warnings):
 def convert(reports, target: str, output: Path):
     """Convert every report in REPORTS to the --to format and write --output JSONL."""
     loaded = _load_reports(reports)
-    n = write_submission_output(loaded, output, target)
+    n = write_submission_output(reports=loaded, path=output, spec=target)
     click.echo(f"converted {n} reports to {target} -> {output}")
 
 

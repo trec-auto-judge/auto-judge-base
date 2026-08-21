@@ -56,14 +56,22 @@ class Leaderboard:
         format: LeaderboardFormat = "ir_measures",
     ) -> None:
         """
-        Write the leaderboard as tab-separated lines.
+        Write the leaderboard, one row per (entry, measure).
 
         Args:
             output: Path to write to
-            format: Column order
+            format: Column order (tab-separated), or "jsonl"
                 - "trec_eval": measure topic value
                 - "tot": run measure topic value
                 - "ir_measures": run topic measure value
+                - "rag4reports": topic run measure value
+                - "jsonl": one JSON object per line with keys
+                  run_id, topic_id, measure, value
+
+        The "jsonl" output matches autojudge_evaluate.eval_results.io exactly
+        (key order and json.dumps defaults included), so files written here are
+        the same shape as the official *.eval.jsonl files that `load` and
+        meta-evaluate read back.
 
         Only measures present in each entry are written (allows sparse rows).
         """
@@ -79,6 +87,15 @@ class Leaderboard:
                         lines.append("\t".join([e.run_id, e.topic_id, m, str(e.values[m])]))
                     elif format == "rag4reports":
                         lines.append("\t".join([e.topic_id, e.run_id, m, str(e.values[m])]))
+                    elif format == "jsonl":
+                        # Values stay typed (no str()) so numbers round-trip as
+                        # numbers; load() stringifies and re-casts them.
+                        lines.append(json.dumps({
+                            "run_id": e.run_id,
+                            "topic_id": e.topic_id,
+                            "measure": m,
+                            "value": e.values[m],
+                        }))
                     else:
                         raise ValueError(f"Unknown format: {format!r}")
 

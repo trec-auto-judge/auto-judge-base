@@ -434,13 +434,15 @@ def convert(report: Report, spec) -> Report:
     maxc = spec.max_citations_per_sentence
     resolved = report.get_sentences_with_citations()  # -> Neuclir doc-id lists, ranked
 
+    # from this point forward we only have to deal with sentences in Neuclir format.
+    
     per_sentence = [
         (s, list(s.citations or [])[:maxc] if maxc is not None else list(s.citations or []))
         for s in resolved
     ]
 
     references: List[str] = []
-    index: Dict[str, int] = {}
+    index: Dict[str, int] = {}   # maps docid to their index in (what will become) references.
     for _s, dids in per_sentence:
         for d in dids:
             if d not in index:
@@ -451,8 +453,8 @@ def convert(report: Report, spec) -> Report:
         if tag == "rag24":
             return [index[d] for d in dids]
         if tag == "ragtime":
-            return {d: 1.0 for d in dids}
-        return list(dids)  # neuclir
+            return {d: 1.0 / i for i, d in enumerate(dids, start=1)}
+        return list(dids)  # neuclir: we are already in neuclir format
 
     new_sentences = [
         cls(text=s.text, citations=emit_citations(dids), metadata=s.metadata, evaldata=s.evaldata)

@@ -316,12 +316,21 @@ class Answer(BaseModel):
     """
 
     answer: str
-    references: Optional[List[Reference]] = None
+    references: Optional[List[Reference]]| Optional[List[str]] = None
 
     quality: Optional[int | str] = None
     importance: Optional[int | str] = None
     creator: Optional[List[Creator]] = None
     metadata: Optional[Dict[str, Any]] = None
+
+    def model_post_init(self, __context):
+        """Normalize a parsed bare-doc-id reference list into Reference objects.
+
+        `references` accepts List[str] so submission-format banks parse; every
+        use site expects Reference objects, so the list shape never escapes here.
+        """
+        if self.references and any(isinstance(r, str) for r in self.references):
+            self.add_references(self.references)
 
     def add_references(
         self,
@@ -463,14 +472,14 @@ class NuggetQuestion(BaseModel):
 
     question: str
     question_markup: Optional[Any] = None
-    answers: Optional[Dict[str, Answer]] = None
+    answers: Optional[Dict[str, Answer]]|Optional[List[Answer]] = None
     sub_nuggets: Optional[List[Union["NuggetQuestion", "NuggetClaim"]]] = None
-    references: Optional[List[Reference]] = None
+    references: Optional[List[Reference]] | Optional[List[str]] = None
 
     question_id: Optional[str] = None
     aggregator_type: Optional[AggregatorType] = None
 
-    query_id: str
+    query_id: Optional[str] = None
     test_collection: Optional[str] = None
 
     quality: Optional[int | str] = None
@@ -481,10 +490,22 @@ class NuggetQuestion(BaseModel):
     model_config = {"recursive": True, "extra": "ignore"}  # Required in pydantic v2 to support recursion
 
     def model_post_init(self, __context):
-        """Assign a hash-based ID if none is given, based on the question text."""
+        """Assign a hash-based ID if none is given, and normalize parsed shapes.
+
+        `answers` accepts a List[Answer] and `references` a List[str] so that
+        submission-format banks parse; both are normalized here to the keyed dict
+        and Reference objects every use site expects, so the parse-only shapes
+        never escape the model.
+        """
 
         if self.question_id is None:
             self.question_id = hashlib.md5(self.question.encode()).hexdigest()
+
+        if isinstance(self.answers, list):
+            self.add_answers(self.answers)
+
+        if self.references and any(isinstance(r, str) for r in self.references):
+            self.add_references(self.references)
 
     def add_answers(self, gold_answers: List[str | Answer] | str | Answer):
         """Normalize and store gold answer strings or objects."""
@@ -593,9 +614,16 @@ class NuggetClaim(BaseModel):
     model_config = {"recursive": True, "extra": "ignore"}
 
     def model_post_init(self, __context):
-        """Assign a hash-based ID if none is given, based on the claim text."""
+        """Assign a hash-based ID if none is given, and normalize parsed shapes.
+
+        `references` accepts a List[str] so submission-format banks parse; it is
+        normalized to Reference objects here (see NuggetQuestion.model_post_init).
+        """
         if self.claim_id is None:
             self.claim_id = hashlib.md5(self.claim.encode()).hexdigest()
+
+        if self.references and any(isinstance(r, str) for r in self.references):
+            self.add_references(self.references)
 
     def add_creator(self, creator: Optional[Union[List[Creator], Creator]]):
         """Normalize and attach creator(s) to the nugget."""
@@ -682,14 +710,17 @@ NuggetClaim.model_rebuild()
 class NuggetBank(BaseModel):
     """Container for a set of nugget questions or claims, tied to a query and optionally including metadata."""
 
-    query_id: Optional[str]
-    title_query: str
+    query_id: Optional[str] = None
+    title_query: Optional[str] = None
     full_query: Any = None
     test_collection: Optional[str] = None
     format_version: str = "v3"
 
-    nugget_bank: Optional[Dict[str, NuggetQuestion]] = None
-    claim_bank: Optional[Dict[str, NuggetClaim]] = None
+    # Dict is the canonical shape (keyed by question/claim text); the List variants
+    # exist only so submission-format banks parse, and are normalized to Dict in
+    # model_post_init. No use site outside parsing ever sees a list.
+    nugget_bank: Optional[Dict[str, NuggetQuestion]|List[NuggetQuestion]] = None
+    claim_bank: Optional[Dict[str, NuggetClaim]|List[NuggetClaim]] = None
     # Read-only view of all nuggets (questions + claims) flattened including sub_nuggets
     # Excluded from serialization - rebuilt on load via index_nuggets()
     all_nuggets_view: Optional[Mapping[str, NuggetQuestion | NuggetClaim]] = Field(
@@ -766,6 +797,70 @@ class NuggetBank(BaseModel):
         self.creator = normalize_creators(creator)
         return self
 
+    def to_ragtime26_nugget_bank(self):
+        """Convert this ragtime25 nugget bank into the ragtime26 submission format.
+
+        The inverse of Ragtime26NuggetBank.to_nugget_bank(). Run metadata is taken
+        from ``self.metadata``; ``topic_id`` falls back to ``query_id``.
+
+        Raises:
+            ValueError: if the bank holds claims (ragtime26 has no claim_bank, so
+                converting would silently drop them), or if a question uses an
+                aggregator ragtime26 cannot express (only AND/OR are allowed;
+                AggregatorType.Default is treated as unspecified).
+        """
+        from .ragtime26.ragtime26_nugget_data import (  # Local import avoids cycle
+            Ragtime26Answer,
+            Ragtime26Nugget,
+            Ragtime26NuggetBank,
+            Ragtime26NuggetMetadata,
+        )
+
+        if self.claim_bank:
+            raise ValueError(
+                f"Cannot convert nugget bank {self.query_id!r} to ragtime26: it holds "
+                f"{len(self.claim_bank)} claim(s) and the ragtime26 format has no claim_bank"
+            )
+
+        def aggregator_of(question: NuggetQuestion) -> Optional[str]:
+            agg = question.aggregator_type
+            if agg is None or agg == AggregatorType.Default:
+                return None
+            if agg in (AggregatorType.AND, AggregatorType.OR):
+                return agg.value
+            raise ValueError(
+                f"Cannot convert question {question.question!r} to ragtime26: "
+                f"aggregator_type {agg.value!r} is not one of AND/OR"
+            )
+
+        nuggets: List[Ragtime26Nugget] = []
+        for question in (self.nugget_bank or {}).values():
+            answers = [
+                Ragtime26Answer(
+                    answer=answer.answer,
+                    references=[ref.doc_id for ref in (answer.references or [])] or None,
+                    metadata=answer.metadata,
+                )
+                for answer in (question.answers or {}).values()
+            ]
+            nuggets.append(
+                Ragtime26Nugget(
+                    question=question.question,
+                    aggregator_type=aggregator_of(question),
+                    answers=answers or None,
+                    importance=question.importance,
+                    metadata=question.metadata,
+                )
+            )
+
+        run_metadata = dict(self.metadata or {})
+        run_metadata.setdefault("topic_id", self.query_id)
+
+        return Ragtime26NuggetBank(
+            metadata=Ragtime26NuggetMetadata.model_validate(run_metadata),
+            nugget_bank=nuggets or None,
+        )
+
     @staticmethod
     def index_nuggets_internal(
         nugget_dictionary: Dict[str, NuggetQuestion], nugget_bank: List[NuggetQuestion]
@@ -802,9 +897,31 @@ class NuggetBank(BaseModel):
         self.all_nuggets_view = MappingProxyType(internal_dict)
 
     def model_post_init(self, __context):
-        """Assign a hash-based query_id from the title_query if none is provided."""
+        """Normalize parsed list-shaped banks, then assign a query_id if none given."""
+
+        # A list-shaped bank is a parsing convenience: re-add through add_nuggets so
+        # entries land under their canonical key (question/claim text) and duplicates
+        # merge, exactly as if they had been added one at a time.
+        if isinstance(self.nugget_bank, list):
+            pending_questions = self.nugget_bank
+            self.nugget_bank = None       # add_nuggets expects dict-or-None
+            self.add_nuggets(pending_questions)
+
+        if isinstance(self.claim_bank, list):
+            pending_claims = self.claim_bank
+            self.claim_bank = None
+            self.add_nuggets(pending_claims)
+
         if self.query_id is None:
-            self.query_id = hashlib.md5(self.title_query.encode()).hexdigest()
+            if self.title_query:
+                self.query_id = hashlib.md5(self.title_query.encode()).hexdigest() # backwards compatible.
+            elif self.metadata and "topic_id" in self.metadata:
+                 self.query_id = self.metadata["topic_id"]   # RAGTIME 2026 compatible
+            elif self.metadata and "query_id" in self.metadata:
+                 self.query_id = self.metadata["query_id"]
+            else:
+                # We tried to recover the query_id, but couldn't
+                raise ValueError(f"Could not recover query_id for {self}")
         self.index_nuggets()
 
 
