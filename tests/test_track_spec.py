@@ -6,6 +6,7 @@ Two groups:
     the structural sniff path).
   * NEW SPEC FRAMEWORK - spec-driven verify per track and the converters.
 """
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -337,11 +338,12 @@ def test_dragun_valid_no_references():
     assert dragun_report().verify(SPECS["dragun25"]) is True
 
 
-def test_dragun_present_references_is_a_smell():
-    # dragun uses no references array; a stray one is a SMELL (warning), not a failure
+def test_dragun_present_references_is_ignored():
+    # dragun25 sets references_kind "ignore": the array is optional, so a present one is
+    # neither a failure nor a smell. (It was "none" -- forbidden, hence a smell -- before.)
     r = dragun_report(refs=[MSM])
     err, warn = findings(r, SPECS["dragun25"])
-    assert err == [] and any("references" in w for w in warn)
+    assert err == [] and not any("references" in w for w in warn)
     assert r.verify(SPECS["dragun25"]) is True
 
 
@@ -636,8 +638,14 @@ def test_to_ragtime_from_any_source_format(builder, expected_cited):
     assert all(isinstance(s, RagtimeReportSentence) for s in rt.responses)
     cited = [list(s.citations.keys()) for s in rt.responses]
     assert cited == expected_cited
-    # every emitted score is the canonical 1.0 (source scores are not carried through)
-    assert all(v == 1.0 for s in rt.responses for v in s.citations.values())
+    src = builder()
+    if isinstance(src.responses[0], RagtimeReportSentence):
+        # a ragtime source states its confidences; they are carried through verbatim
+        assert [s.citations for s in rt.responses] == [s.citations for s in src.responses]
+    else:
+        # the order-only formats have none to carry, so rank-derived stand-ins are
+        # synthesized -- and every sentence here cites one doc, which ranks first
+        assert all(v == 1.0 for s in rt.responses for v in s.citations.values())
 
 
 def test_to_rag_from_ragtime_orders_multicite_by_confidence():
@@ -652,24 +660,44 @@ def test_to_rag_from_ragtime_orders_multicite_by_confidence():
     assert [refs[i] for i in rag.responses[0].citations] == [UUID2, UUID]
 
 
-def test_to_ragtime_from_ragtime_normalizes_scores():
-    # ragtime -> ragtime is lossy on scores (all become 1.0) but preserves the doc-id set
+def test_to_ragtime_from_ragtime_preserves_scores():
+    # ragtime -> ragtime keeps the submitted confidences; both formats can express them,
+    # so there is nothing to normalize (they used to be flattened to 1.0)
     rt = convert(ragtime_report(), "ragtime26")
-    assert rt.responses[0].citations == {UUID: 1.0}
-    assert rt.responses[1].citations == {UUID2: 1.0}
+    assert rt.responses[0].citations == {UUID: 100.0}
+    assert rt.responses[1].citations == {UUID2: 50.0}
 
 
-def test_convert_truncates_to_max_citations():
-    # a sentence citing 5 docs at different confidences; rag26 caps citations at 3
+def _five_citations_report():
+    # a sentence citing 5 docs at different confidences; the rag26 cap is 3
     docs = {f"shard_0000{i}_{i}": float(100 - i * 10) for i in range(5)}
     src = Report(metadata=ReportMetaData(team_id="T", topic_id="1", run_id="r", run_desc="d"),
                  responses=[RagtimeReportSentence(text="x", citations=docs)],
                  references=list(docs))
-    rag = convert(src, SPECS["rag26"])
+    return src, docs
+
+
+def test_convert_truncates_to_max_citations():
+    src, docs = _five_citations_report()
+    # the cap only bites where citation_count is not a smell -- rag26 lists it, so the
+    # spec is taken with smells cleared (see the companion test below)
+    rag = convert(src, replace(SPECS["rag26"], smells=()))
     assert len(rag.responses[0].citations) == 3          # truncated to the cap
-    assert len(rag.references) == 3                        # references only the kept 3
-    # kept the top-3 by confidence (100, 90, 80), references built AFTER truncation
-    assert rag.references == ["shard_00000_0", "shard_00001_1", "shard_00002_2"]
+    # kept the top-3 by confidence (100, 90, 80), the two weakest dropped
+    kept = [rag.references[i] for i in rag.responses[0].citations]
+    assert kept == ["shard_00000_0", "shard_00001_1", "shard_00002_2"]
+    # references_kind is retrieval_list, so the retrieval list survives the truncation
+    # even though two of its entries are now uncited
+    assert rag.references == list(docs)
+
+
+def test_convert_does_not_truncate_when_citation_count_is_a_smell():
+    # a smell says the violation is known and must stay VISIBLE -- converting must not
+    # quietly repair it, or the check that would have reported it has nothing to find
+    src, _docs = _five_citations_report()
+    rag = convert(src, SPECS["rag26"])
+    assert len(rag.responses[0].citations) == 5
+    assert "citation_count" in SPECS["rag26"].smells
 
 
 def test_converters_respect_explicit_spec():

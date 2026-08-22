@@ -180,7 +180,7 @@ specs:
     run_id_max_len: null
     docid_pattern: 'msmarco_v2\.1_doc_\d\d_\d+#\d+_\d+'
     collection_ids: [msmarco_v2.1_doc_segmented]
-    references_kind: none                # no references field; citations are self-contained doc-ids
+    references_kind: ignore                # no references lptional
     references_max: null
     max_citations_per_sentence: 3
     length_unit: words
@@ -201,7 +201,7 @@ specs:
     run_id_max_len: null
     docid_pattern: null                  # kiddie corpus uses arbitrary ids (e.g. Wikipedia titles) - do not constrain
     collection_ids: null
-    references_kind: none                # no references array; citations are self-contained doc-ids
+    references_kind: ignore                # references optional
     references_max: null
     max_citations_per_sentence: null
     length_unit: words

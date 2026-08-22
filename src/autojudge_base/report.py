@@ -20,7 +20,7 @@ import argparse
 from enum import Enum
 import gzip
 import re
-from typing import Any, Dict, Iterable, List, Optional, Set, TextIO, Union, TypeAlias
+from typing import Any, Dict, Iterable, List, Optional, Set, TextIO, Tuple, Type, Union, TypeAlias
 from io import StringIO
 from pathlib import Path
 import json
@@ -119,6 +119,48 @@ from autojudge_base.report_sentences import (  # noqa: E402
     ReportSentence,
 )
 
+def rank_confidences(doc_ids: List[str]) -> Dict[str, float]:
+    """Synthesize ragtime confidences from a priority-ordered doc-id list.
+
+    Only for formats that carry priority as *order* (neuclir, rag24) and have no
+    real confidences to preserve. Any strictly decreasing function would do; 1/rank
+    is used so the ordering survives the round trip. Note that these values occupy
+    the bottom of the 0.0-100.0 range ragtime permits -- they encode rank, not a
+    model score, and must not be compared against natively produced confidences.
+
+    Duplicates keep their first (highest-priority) position.
+    """
+    unique = list(dict.fromkeys(doc_ids))
+    return {d: 1.0 / rank for rank, d in enumerate(unique, start=1)}
+
+
+RankedCitations: TypeAlias = List[Tuple[str, float]]
+"""Citations as (doc_id, confidence) pairs, highest confidence first."""
+
+EmittedCitations: TypeAlias = Union[Dict[str, float], List[str], List[int]]
+"""A sentence's citations in one track's wire shape.
+
+One member per sentence_type tag: {doc_id: confidence} for ragtime, [doc_id] for
+neuclir, [position into references] for rag24 (see track_spec._TAG_TO_CLASS).
+"""
+
+
+def rank_citations(citations: Optional[Dict[str, float]]) -> Optional[RankedCitations]:
+    """Order a ragtime citation mapping by descending confidence.
+
+    The inverse of `rank_confidences`: that one turns order into numbers, this one
+    turns numbers into order while keeping them. Every wire format wants the
+    citations in priority order -- ragtime states it as the confidence, neuclir and
+    rag24 as list position -- so ranking once and carrying the pairs lets a converter
+    serve all three without re-deriving anything.
+
+    Ties keep their submitted order. None (the sentence cited nothing) stays None,
+    which is not the same as an empty citation set.
+    """
+    if citations is None:
+        return None
+    return sorted(citations.items(), key=lambda kv: kv[1], reverse=True)
+
 
 class RankedDocument(BaseModel):
     doc_id:str
@@ -200,6 +242,40 @@ class Report(BaseModel):
             elif isinstance(r, Rag24ReportSentence):
                 doc_ids = [references[i] for i in (r.citations or []) if 0 <= i < len(references)]
                 result.append(NeuclirReportSentence(text=r.text, citations=doc_ids, metadata=r.metadata, evaldata=r.evaldata))
+
+        return result
+    
+    def get_sentences_with_citation_confidences(self) -> List[RagtimeReportSentence]:
+        """Get all sentences with citations+confidences in unified format.
+
+        Returns RagtimeReportSentence objects where citations is Dict[str,float]
+        where higher float means higher priority. Does not modify the underlying report data.
+
+        Handles all sentence formats:
+        - RagtimeReportSentence: returned as-is, real confidences preserved
+        - NeuclirReportSentence: confidence by descending order
+        - Rag24ReportSentence: indices resolved to doc_ids via report.references, confidence by descending order
+
+        The order-carrying formats have no confidences to preserve, so theirs are
+        synthesized from rank (see rank_confidences) -- unlike the ragtime case,
+        where the submitted values pass through untouched.
+        """
+        references: List[str] = self.references or []
+        result: List[RagtimeReportSentence] = []
+
+        for r in self.responses:
+            citations: Optional[Dict[str, float]]
+            if isinstance(r, RagtimeReportSentence):
+                result.append(r)
+            elif isinstance(r, NeuclirReportSentence):
+                citations = rank_confidences(r.citations) if r.citations is not None else None
+                result.append(RagtimeReportSentence(text=r.text, citations=citations, metadata=r.metadata, evaldata=r.evaldata))
+            elif isinstance(r, Rag24ReportSentence):
+                doc_ids: List[str] = [references[i] for i in (r.citations or []) if 0 <= i < len(references)]
+                citations = rank_confidences(doc_ids) if r.citations is not None else None
+                result.append(RagtimeReportSentence(text=r.text, citations=citations, metadata=r.metadata, evaldata=r.evaldata))
+            else:
+                raise RuntimeError(f"Unknown sentence format {type(r).__name__}, cannot resolve citations: {r}")
 
         return result
 
@@ -420,45 +496,90 @@ def convert(report: Report, spec) -> Report:
     """Build a NEW Report in the target spec's wire shape.
 
     `spec` may be a TrackSpec or a track-id string (e.g. "rag26"). Sentences use
-    spec.emit_sentence_type, citations are truncated to spec.max_citations_per_sentence
-    (kept top-ranked, since the resolver orders by confidence), references follow
-    spec.references_kind (built AFTER truncation so cited_only stays exact), and metadata
-    is remapped to the spec (see _map_metadata). Source citations are read via the
-    format-agnostic resolver, so any input representation converts.
+    spec.emit_sentence_type; metadata is remapped to the spec (see _map_metadata).
+
+    Source citations are read via `get_sentences_with_citation_confidences`, which
+    normalizes any input format to the *ragtime* shape -- the most general of the
+    three, being doc-id keyed like neuclir while also carrying priority as a number
+    rather than as list position. Those are then ranked once into (doc_id, confidence)
+    pairs (`rank_citations`) and carried in that shape through truncation and
+    reference building, so each target format is served from the same ordered data:
+
+        ragtime -> dict(ranked)                       confidences verbatim
+        neuclir -> [doc_id ...]                       priority becomes list order
+        rag24   -> [position in references ...]       priority becomes list order
+
+    Lossy in one direction only: emitting rag24 or neuclir drops the confidences
+    those formats cannot express (the ordering preserves the priority). A ragtime
+    source converted to ragtime keeps its confidences exactly; the rank-derived
+    stand-ins for order-only sources are minted once in the resolver
+    (`rank_confidences`), never here. A sentence that cited nothing (citations is
+    None) stays None rather than becoming an empty citation set.
+
+    Conversion never enforces a rule the spec marks as a smell: citations are
+    truncated to spec.max_citations_per_sentence only when "citation_count" is NOT
+    in spec.smells (a smell means the data is known to violate the rule and must
+    survive the conversion so the violation stays visible). Truncation keeps the
+    top-ranked citations.
+
+    References follow spec.references_kind: "cited_only" rebuilds the list from the
+    citations alone, anything else keeps the source list (deduplicated) and appends
+    any cited doc-id missing from it. A reference entry is a doc-id and nothing else
+    -- no format gives it a confidence -- so citations index into it while their
+    confidences stay on the sentence.
     """
     from autojudge_base.track_spec import get_spec
     if isinstance(spec, str):
         spec = get_spec(spec)
-    tag = spec.emit_sentence_type
-    cls = sentence_class_for(tag)
-    maxc = spec.max_citations_per_sentence
-    resolved = report.get_sentences_with_citations()  # -> Neuclir doc-id lists, ranked
+    tag: str = spec.emit_sentence_type
+    cls: Type[ReportSentence] = sentence_class_for(tag)
+    maxc: Optional[int] = spec.max_citations_per_sentence
 
-    # from this point forward we only have to deal with sentences in Neuclir format.
-    
-    per_sentence = [
-        (s, list(s.citations or [])[:maxc] if maxc is not None else list(s.citations or []))
-        for s in resolved
-    ]
+    # One shape from here on: ragtime sentences, citations as Dict[str, float].
+    resolved:List[RagtimeReportSentence] = report.get_sentences_with_citation_confidences()
 
+    # Rank once, then carry (doc_id, confidence) pairs the rest of the way. Truncating
+    # the ranked pairs is what makes "keeps the top-ranked citations" true.
+    chop_cites: bool = (maxc is not None) and ("citation_count" not in spec.smells)
+    per_sentence: List[Tuple[RagtimeReportSentence, Optional[RankedCitations]]] = []
+    for s in resolved:
+        ranked: Optional[RankedCitations] = rank_citations(s.citations)
+        if ranked is not None and chop_cites:
+            ranked = ranked[:maxc]
+        per_sentence.append((s, ranked))
+
+    # Build up the reference set, ensuring all cited documents are in it.
     references: List[str] = []
-    index: Dict[str, int] = {}   # maps docid to their index in (what will become) references.
-    for _s, dids in per_sentence:
-        for d in dids:
-            if d not in index:
-                index[d] = len(references)
-                references.append(d)
+    if spec.references_kind != "cited_only":
+        references = list(dict.fromkeys(report.references or []))  # deduplicate the list
 
-    def emit_citations(dids):
-        if tag == "rag24":
-            return [index[d] for d in dids]
+    # Position of each doc-id in (what will become) references; rag24 cites by position.
+    index: Dict[str, int] = {doc_id: pos for pos, doc_id in enumerate(references)}
+    for _s, sentence_citations in per_sentence:
+        for doc_id, _confidence in sentence_citations or []:
+            if doc_id not in index:
+                index[doc_id] = len(references)
+                references.append(doc_id)  # on "cited_only" this builds the whole list,
+                                           # in citation-priority order as encountered
+
+    def emit_citations(ranked: Optional[RankedCitations]) -> Optional[EmittedCitations]:
+        """Project the ranked pairs onto the target format's citation representation."""
+        if ranked is None:
+            return None
         if tag == "ragtime":
-            return {d: 1.0 / i for i, d in enumerate(dids, start=1)}
-        return list(dids)  # neuclir: we are already in neuclir format
+            ragtime_citations: Dict[str, float] = dict(ranked)
+            return ragtime_citations
+        if tag == "neuclir":
+            neuclir_citations: List[str] = [doc_id for doc_id, _confidence in ranked]
+            return neuclir_citations
+        if tag == "rag24":
+            rag24_citations: List[int] = [index[doc_id] for doc_id, _confidence in ranked]
+            return rag24_citations
+        raise KeyError(f"Cannot emit citations for unknown sentence_type tag {tag!r}")
 
-    new_sentences = [
-        cls(text=s.text, citations=emit_citations(dids), metadata=s.metadata, evaldata=s.evaldata)
-        for s, dids in per_sentence
+    new_sentences: List[ReportSentence] = [
+        cls(text=s.text, citations=emit_citations(ranked), metadata=s.metadata, evaldata=s.evaldata)
+        for s, ranked in per_sentence
     ]
 
     return Report(

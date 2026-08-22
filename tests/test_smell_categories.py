@@ -68,7 +68,10 @@ CASES = {
         [UUID])),
     "docid_pattern": (RAG26, _rag26(
         sents=[Rag24ReportSentence(text="x.", citations=[0])], refs=["not_a_shard"])),
-    "references_present": (DRAGUN, Report(
+    # Fires only for references_kind "none". No bundled spec uses that any more
+    # (dragun25 and kiddie moved to "ignore": a references array is optional there,
+    # not forbidden), so the category is driven from a spec that does.
+    "references_present": (replace(DRAGUN, references_kind="none"), Report(
         metadata=ReportMetaData(team_id="T", run_id="r", topic_id="t",
                                 type="automatic", use_starter_kit=0),
         responses=[NeuclirReportSentence(text="x.", citations=[])],
