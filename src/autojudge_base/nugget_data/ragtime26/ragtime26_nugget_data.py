@@ -99,7 +99,10 @@ class Ragtime26NuggetBank(BaseModel):
 
     format_version: str = RAGTIME26_FORMAT_VERSION
     metadata: Ragtime26NuggetMetadata
-    nugget_bank: Optional[List[Ragtime26Nugget]] = None
+    # Required, though it may be empty: every other field is optional, so without
+    # this a Report would validate as a nugget bank with no nuggets and its
+    # responses would be dropped by extra="ignore".
+    nugget_bank: List[Ragtime26Nugget]
 
     @property
     def query_id(self) -> str:
@@ -108,7 +111,7 @@ class Ragtime26NuggetBank(BaseModel):
 
     def nuggets_as_list(self) -> List[Ragtime26Nugget]:
         """All nuggets in this nugget bank (matches NuggetBank.nuggets_as_list)."""
-        return list(self.nugget_bank or [])
+        return list(self.nugget_bank)
 
     def to_nugget_bank(self) -> NuggetBank:
         """Convert into the ragtime25 NuggetBank (v3).

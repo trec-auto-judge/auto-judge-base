@@ -255,8 +255,8 @@ def test_to_ragtime26_nugget_bank_treats_default_aggregator_as_unspecified():
 
 
 def test_from_banks_list_keys_by_topic_id():
-    bank1 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"))
-    bank2 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-2"))
+    bank1 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"), nugget_bank=[])
+    bank2 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-2"), nugget_bank=[])
 
     nugget_banks = Ragtime26NuggetBanks.from_banks_list([bank1, bank2])
 
@@ -265,8 +265,8 @@ def test_from_banks_list_keys_by_topic_id():
 
 
 def test_from_banks_list_duplicate_error():
-    bank1 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"))
-    bank2 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"))
+    bank1 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"), nugget_bank=[])
+    bank2 = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"), nugget_bank=[])
 
     with pytest.raises(ValueError, match="Duplicate topic_id"):
         Ragtime26NuggetBanks.from_banks_list([bank1, bank2])
@@ -320,7 +320,7 @@ def test_protocol_compliance():
 
     assert isinstance(Ragtime26NuggetBanks(banks={}), NuggetBanksProtocol)
 
-    nugget_bank = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"))
+    nugget_bank = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"), nugget_bank=[])
     assert isinstance(nugget_bank, NuggetBankProtocol)
     assert nugget_bank.query_id == "topic-1"
 
@@ -337,7 +337,7 @@ def test_verification_reports_empty_nugget_bank():
         NuggetBanksVerification, NuggetBanksVerificationError
     )
 
-    empty = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"))
+    empty = Ragtime26NuggetBank(metadata=Ragtime26NuggetMetadata(topic_id="topic-1"), nugget_bank=[])
     nugget_banks = Ragtime26NuggetBanks.from_banks_list([empty])
 
     with pytest.raises(NuggetBanksVerificationError, match="Empty nugget banks.*topic-1"):

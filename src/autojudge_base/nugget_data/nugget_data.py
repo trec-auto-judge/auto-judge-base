@@ -858,7 +858,7 @@ class NuggetBank(BaseModel):
 
         return Ragtime26NuggetBank(
             metadata=Ragtime26NuggetMetadata.model_validate(run_metadata),
-            nugget_bank=nuggets or None,
+            nugget_bank=nuggets,
         )
 
     @staticmethod
