@@ -285,14 +285,17 @@ def option_nugget_banks():
 
 
 def option_corpus():
-    """Optional document corpus path or ir-datasets ID."""
+    """Optional document corpus reference: path, ir-datasets ID, or URL."""
     def decorator(func):
         func = click.option(
             "--corpus",
             type=str,
             required=False,
             default=None,
-            help="Optional document corpus (path to a directory or an ir-datasets ID). Forwarded to create_nuggets/create_qrels/judge."
+            help="Optional document corpus: a directory path, an ir-datasets ID, or a "
+                 "reference to where the corpus can be obtained (e.g. an https:// or "
+                 "hf:// URL). Passed through unresolved to "
+                 "create_nuggets/create_qrels/judge, which decide how to read it."
         )(func)
         return func
     return decorator
