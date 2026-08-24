@@ -53,6 +53,7 @@ all = [
 [project.scripts]
 auto-judge = "autojudge_base.cli:main"
 auto-judge-report = "autojudge_base.report_tool:main"
+scrub = "autojudge_base.scrub_tool:main"
 
 [project.urls]
 Homepage = "https://github.com/trec-auto-judge/auto-judge-base"
