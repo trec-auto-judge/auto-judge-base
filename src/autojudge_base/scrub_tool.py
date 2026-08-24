@@ -107,6 +107,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help=f"scrub log to append to (default: {DEFAULT_LOG})")
     args = ap.parse_args(argv)
 
+    # Tier 2 preserves a run's formatting template, which is a fingerprint. One
+    # record at a time is a debugging aid; a whole file of them is a table you
+    # can compare across runs, which is identification. Tier 1 is uniform by
+    # construction, so bulk is harmless there.
+    if args.chars and args.topic is None and args.run is None and args.index is None:
+        print("scrub: --chars needs a selector (--topic / --run / --index): "
+              "it preserves each run's formatting template, so scrubbing a whole "
+              "file at once produces a fingerprint table, not a reproducer.",
+              file=sys.stderr)
+        return 2
+
     src: Iterable[str]
     if args.input:
         path = Path(args.input)
