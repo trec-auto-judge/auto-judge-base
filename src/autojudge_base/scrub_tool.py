@@ -24,7 +24,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional, TextIO
 
-from .scrub import ScrubStats, scrub_json_line
+from .scrub import (ScrubStats, SelectorRequired, require_selector,
+                    scrub_json_line)
+
+
+class NoRecordSelected(RuntimeError):
+    """The selector matched nothing -- distinct from a record that is empty."""
 
 DEFAULT_LOG = "scrub-log.jsonl"
 
@@ -53,6 +58,7 @@ def _selected(line: str, topic: Optional[str], run: Optional[str]) -> bool:
 def scrub_stream(src: Iterable[str], out: TextIO, *, chars: bool,
                  topic: Optional[str] = None, run: Optional[str] = None,
                  index: Optional[int] = None) -> ScrubStats:
+    require_selector(chars, topic, run, index)
     stats = ScrubStats()
     kept = 0
     for i, line in enumerate(src):
@@ -65,8 +71,14 @@ def scrub_stream(src: Iterable[str], out: TextIO, *, chars: bool,
         kept += 1
         out.write(scrub_json_line(line, chars, stats) + "\n")
     if kept == 0:
-        # A structural fact, not content: the selector matched nothing.
-        print("scrub: no record matched the selector", file=sys.stderr)
+        # A structural fact, not content: the selector matched nothing. Say so
+        # loudly -- an empty stdout with exit 0 reads as "the record is empty",
+        # and --topic/--run cannot match a record that does not parse (locate it
+        # with a tier-1 bulk run, then select it with --index).
+        raise NoRecordSelected(
+            "no record matched the selector; note that --topic/--run cannot "
+            "match an unparseable record -- locate its line with a tier-1 run "
+            "and select it with --index")
     return stats
 
 
@@ -107,17 +119,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help=f"scrub log to append to (default: {DEFAULT_LOG})")
     args = ap.parse_args(argv)
 
-    # Tier 2 preserves a run's formatting template, which is a fingerprint. One
-    # record at a time is a debugging aid; a whole file of them is a table you
-    # can compare across runs, which is identification. Tier 1 is uniform by
-    # construction, so bulk is harmless there.
-    if args.chars and args.topic is None and args.run is None and args.index is None:
-        print("scrub: --chars needs a selector (--topic / --run / --index): "
-              "it preserves each run's formatting template, so scrubbing a whole "
-              "file at once produces a fingerprint table, not a reproducer.",
-              file=sys.stderr)
-        return 2
-
     src: Iterable[str]
     if args.input:
         path = Path(args.input)
@@ -134,6 +135,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         stats = scrub_stream(src, fh_out, chars=args.chars, topic=args.topic,
                              run=args.run, index=args.index)
+    except (SelectorRequired, NoRecordSelected) as exc:
+        print(f"scrub: {exc}", file=sys.stderr)
+        return 2
     finally:
         if fh_in is not None:
             fh_in.close()
