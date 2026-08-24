@@ -76,9 +76,6 @@ The `auto-judge` CLI (provided by the `autojudge-base` package) uses autojudge-b
 # Run a judge workflow
 auto-judge run --workflow workflow.yml --rag-responses responses.jsonl
 
-# Export corpus
-auto-judge export-corpus --output corpus.tar.gz
-
 # List available models
 auto-judge list-models
 ```

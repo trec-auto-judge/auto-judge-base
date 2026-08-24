@@ -72,9 +72,33 @@ if TYPE_CHECKING:  # typing only -- keeps scrub free of import cycles
     from .request import Request
 
 __all__ = [
-    "TIER1_STRING", "ScrubStats", "is_schema_key",
-    "scrub_string", "scrub_value", "scrub_json_line", "scrub_model",
+    "TIER1_STRING", "ScrubStats", "SelectorRequired", "is_schema_key",
+    "require_selector", "scrub_string", "scrub_value", "scrub_json_line",
+    "scrub_model",
 ]
+
+
+class SelectorRequired(ValueError):
+    """Raised when tier 2 is asked to scrub without selecting a record."""
+
+
+def require_selector(chars: bool, topic=None, run=None, index=None) -> None:
+    """Refuse tier 2 over an unselected set of records.
+
+    Tier 2 preserves each run's formatting template, which is a fingerprint. One
+    record at a time is a debugging aid; a whole file of them is a table that can
+    be compared across runs, which is identification. Tier 1 is uniform by
+    construction, so bulk is harmless there.
+
+    This lives in the library, not in the CLI, so a caller that imports
+    :func:`scrub_json_line` directly is bound by it too -- a rule enforced only
+    at the command line is a rule that reaching for the API removes.
+    """
+    if chars and topic is None and run is None and index is None:
+        raise SelectorRequired(
+            "scrub tier 2 (--chars) needs a selector (topic, run, or index): it "
+            "preserves each run's formatting template, so scrubbing a whole file "
+            "at once produces a fingerprint table, not a reproducer.")
 
 #: Every string becomes this in tier 1 -- a fixed phrase, not a length-preserving
 #: filler: tier 1 destroys length as well as content.
