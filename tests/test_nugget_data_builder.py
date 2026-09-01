@@ -1,7 +1,10 @@
 """Tests for NuggetBank and NuggetBanks builders."""
 
+import json
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from autojudge_base.nugget_data import (
     Creator, NuggetQuestion, AggregatorType, Answer, NuggetBank, NuggetClaim,
@@ -387,6 +390,40 @@ def test_nugget_banks_write_read_jsonl():
         assert len(loaded.banks) == 2
         assert "t1" in loaded.banks
         assert "t2" in loaded.banks
+
+
+def test_nugget_banks_read_extensionless_jsonl():
+    """Extensionless anonymized run files are detected as JSONL."""
+    bank1 = NuggetBank(query_id="t1", title_query="Topic 1")
+    bank1.add_nuggets(NuggetQuestion.from_lazy("t1", "Q1?", ["A1"]))
+    bank2 = NuggetBank(query_id="t2", title_query="Topic 2")
+    bank2.add_nuggets(NuggetQuestion.from_lazy("t2", "Q2?", ["A2"]))
+    banks = NuggetBanks.from_banks_list([bank1, bank2])
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        jsonl_path = Path(tmpdir) / "banks.jsonl"
+        extensionless_path = Path(tmpdir) / "anonymized-run"
+        write_nugget_banks(banks, jsonl_path, format="jsonl")
+        extensionless_path.write_bytes(jsonl_path.read_bytes())
+
+        loaded = load_nugget_banks_from_file(extensionless_path)
+
+    assert set(loaded.banks) == {"t1", "t2"}
+
+
+def test_nugget_banks_explicit_json_remains_strict():
+    """A malformed .json file is not silently reinterpreted as JSONL."""
+    bank1 = NuggetBank(query_id="t1", title_query="Topic 1")
+    bank2 = NuggetBank(query_id="t2", title_query="Topic 2")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "banks.json"
+        path.write_text(
+            bank1.model_dump_json() + "\n" + bank2.model_dump_json() + "\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(json.JSONDecodeError, match="Extra data"):
+            load_nugget_banks_from_file(path)
 
 
 def test_nugget_banks_write_read_jsonl_gz():

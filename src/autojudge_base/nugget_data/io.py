@@ -85,8 +85,20 @@ def _load_nugget_banks_from_file(
     with open_fn(path, mode="rt", encoding="utf-8") as f:
         if ".jsonl" in str_path:
             return _load_jsonl(f, bank_model, container_model)
-        else:
+        if str_path.endswith(".json") or str_path.endswith(".json.gz"):
             return _load_json(f, bank_model, container_model)
+
+        # Anonymized track releases use extensionless run filenames even when
+        # their contents are JSONL.  Preserve strict handling for explicit
+        # .json/.jsonl names, but detect multiple JSON documents for paths
+        # whose filename does not declare a format.
+        try:
+            return _load_json(f, bank_model, container_model)
+        except json.JSONDecodeError as error:
+            if error.msg != "Extra data":
+                raise
+            f.seek(0)
+            return _load_jsonl(f, bank_model, container_model)
 
 
 def _load_nugget_banks_from_directory(
