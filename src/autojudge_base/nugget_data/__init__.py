@@ -39,6 +39,11 @@ from .nugget_banks import (
     write_nugget_banks,
 )
 
+from .merge import (
+    merge_nugget_banks,
+    merge_nugget_bank_files,
+)
+
 from .nuggetizer.nuggetizer_data import (
     NuggetizerNuggetBank,
     NuggetizerNuggetBanks,

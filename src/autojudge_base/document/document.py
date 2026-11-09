@@ -7,7 +7,6 @@ import json
 
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr, ValidationError
-import requests
 # aiohttp, aiolimiter imported lazily in async functions
 
 from .text_chunker import get_limit_length_chunks, get_sentence_chunks_on_newline, get_paragraph_chunks
